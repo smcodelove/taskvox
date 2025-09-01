@@ -1,13 +1,14 @@
 """
-TasKvox AI - Call History Router
-View and manage conversation history
+TasKvox AI - Fixed History Router
+Replace your app/routers/history.py - fix db.func issue
 """
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import desc, and_, or_
+from sqlalchemy import desc, and_, or_, func
+from datetime import datetime, timedelta
 
 from app.database import get_db
 from app import models, schemas, auth
@@ -88,14 +89,14 @@ async def history_page(
             models.Conversation.status == "failed"
         ).count()
     
-    # Calculate total duration
-    total_duration = db.query(models.Conversation)\
+    # Calculate total duration - FIXED: use func from sqlalchemy
+    total_duration_result = db.query(func.sum(models.Conversation.duration_seconds))\
         .filter(
             models.Conversation.user_id == current_user.id,
             models.Conversation.duration_seconds.isnot(None)
-        ).with_entities(
-            db.func.sum(models.Conversation.duration_seconds)
-        ).scalar() or 0
+        ).scalar()
+    
+    total_duration = total_duration_result or 0
     
     return templates.TemplateResponse(
         "history.html",
@@ -146,27 +147,6 @@ async def get_conversation_details(
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
     
-    # Try to get updated conversation data from ElevenLabs if we have the ID
-    conversation_data = None
-    if conversation.elevenlabs_conversation_id and current_user.elevenlabs_api_key:
-        try:
-            client = ElevenLabsClient(current_user.elevenlabs_api_key)
-            result = await client.get_conversation(conversation.elevenlabs_conversation_id)
-            if result["success"]:
-                conversation_data = result["conversation"]
-                
-                # Update local conversation with fresh data
-                if conversation_data.get("status"):
-                    conversation.status = conversation_data["status"]
-                if conversation_data.get("transcript"):
-                    conversation.transcript = conversation_data["transcript"]
-                if conversation_data.get("duration_seconds"):
-                    conversation.duration_seconds = conversation_data["duration_seconds"]
-                
-                db.commit()
-        except Exception as e:
-            print(f"Error fetching conversation from ElevenLabs: {e}")
-    
     return {
         "conversation": {
             "id": conversation.id,
@@ -179,44 +159,8 @@ async def get_conversation_details(
             "agent_name": conversation.agent.name if conversation.agent else "Unknown",
             "campaign_name": conversation.campaign.name if conversation.campaign else "Direct Call",
             "elevenlabs_conversation_id": conversation.elevenlabs_conversation_id
-        },
-        "elevenlabs_data": conversation_data
+        }
     }
-
-@router.get("/{conversation_id}/audio")
-async def get_conversation_audio(
-    conversation_id: int,
-    current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
-    db: Session = Depends(get_db)
-):
-    """Get conversation audio URL"""
-    
-    conversation = db.query(models.Conversation)\
-        .filter(
-            models.Conversation.id == conversation_id,
-            models.Conversation.user_id == current_user.id
-        ).first()
-    
-    if not conversation:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-    
-    if not conversation.elevenlabs_conversation_id:
-        raise HTTPException(status_code=404, detail="Audio not available")
-    
-    if not current_user.elevenlabs_api_key:
-        raise HTTPException(status_code=400, detail="API key not configured")
-    
-    try:
-        client = ElevenLabsClient(current_user.elevenlabs_api_key)
-        result = await client.get_conversation_audio(conversation.elevenlabs_conversation_id)
-        
-        if result["success"]:
-            return result["audio"]
-        else:
-            raise HTTPException(status_code=404, detail="Audio not found")
-            
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error retrieving audio: {str(e)}")
 
 @router.delete("/{conversation_id}")
 async def delete_conversation(
@@ -251,151 +195,3 @@ async def delete_conversation(
     db.commit()
     
     return {"message": "Conversation deleted successfully"}
-
-@router.post("/export")
-async def export_conversations(
-    search: Optional[str] = None,
-    status_filter: Optional[str] = None,
-    campaign_filter: Optional[int] = None,
-    format: str = "csv",
-    current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
-    db: Session = Depends(get_db)
-):
-    """Export conversation history"""
-    
-    # Build query with same filters as history page
-    query = db.query(models.Conversation)\
-        .options(joinedload(models.Conversation.agent))\
-        .options(joinedload(models.Conversation.campaign))\
-        .filter(models.Conversation.user_id == current_user.id)
-    
-    if search:
-        query = query.filter(
-            or_(
-                models.Conversation.phone_number.ilike(f"%{search}%"),
-                models.Conversation.contact_name.ilike(f"%{search}%"),
-                models.Conversation.transcript.ilike(f"%{search}%")
-            )
-        )
-    
-    if status_filter:
-        query = query.filter(models.Conversation.status == status_filter)
-    
-    if campaign_filter:
-        query = query.filter(models.Conversation.campaign_id == campaign_filter)
-    
-    conversations = query.order_by(desc(models.Conversation.created_at)).all()
-    
-    # Prepare export data
-    export_data = []
-    for conv in conversations:
-        export_data.append({
-            "id": conv.id,
-            "phone_number": conv.phone_number,
-            "contact_name": conv.contact_name or "",
-            "agent_name": conv.agent.name if conv.agent else "",
-            "campaign_name": conv.campaign.name if conv.campaign else "Direct Call",
-            "status": conv.status or "",
-            "duration_seconds": conv.duration_seconds or 0,
-            "transcript": conv.transcript or "",
-            "created_at": conv.created_at.isoformat(),
-        })
-    
-    if format.lower() == "json":
-        from fastapi.responses import JSONResponse
-        return JSONResponse(
-            content=export_data,
-            headers={"Content-Disposition": "attachment; filename=conversations.json"}
-        )
-    else:
-        # CSV export
-        import csv
-        from fastapi.responses import StreamingResponse
-        import io
-        
-        output = io.StringIO()
-        writer = csv.DictWriter(output, fieldnames=[
-            "id", "phone_number", "contact_name", "agent_name", 
-            "campaign_name", "status", "duration_seconds", "transcript", "created_at"
-        ])
-        writer.writeheader()
-        writer.writerows(export_data)
-        
-        output.seek(0)
-        return StreamingResponse(
-            io.BytesIO(output.getvalue().encode('utf-8')),
-            media_type="text/csv",
-            headers={"Content-Disposition": "attachment; filename=conversations.csv"}
-        )
-
-@router.get("/stats/summary")
-async def get_history_stats(
-    current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
-    db: Session = Depends(get_db)
-):
-    """Get detailed history statistics"""
-    
-    from datetime import datetime, timedelta
-    from sqlalchemy import func, case
-    
-    # Date ranges
-    today = datetime.utcnow().date()
-    week_ago = today - timedelta(days=7)
-    month_ago = today - timedelta(days=30)
-    
-    # Overall stats
-    total_conversations = db.query(models.Conversation)\
-        .filter(models.Conversation.user_id == current_user.id).count()
-    
-    # Status breakdown
-    status_stats = db.query(
-        models.Conversation.status,
-        func.count(models.Conversation.id).label('count')
-    ).filter(models.Conversation.user_id == current_user.id)\
-     .group_by(models.Conversation.status).all()
-    
-    # Daily stats for the last 30 days
-    daily_stats = db.query(
-        func.date(models.Conversation.created_at).label('date'),
-        func.count(models.Conversation.id).label('total_calls'),
-        func.sum(
-            case(
-                (models.Conversation.status == 'completed', 1),
-                else_=0
-            )
-        ).label('successful_calls')
-    ).filter(
-        and_(
-            models.Conversation.user_id == current_user.id,
-            models.Conversation.created_at >= month_ago
-        )
-    ).group_by(func.date(models.Conversation.created_at))\
-     .order_by(func.date(models.Conversation.created_at)).all()
-    
-    # Average call duration
-    avg_duration = db.query(func.avg(models.Conversation.duration_seconds))\
-        .filter(
-            and_(
-                models.Conversation.user_id == current_user.id,
-                models.Conversation.duration_seconds.isnot(None),
-                models.Conversation.status == 'completed'
-            )
-        ).scalar() or 0
-    
-    return {
-        "total_conversations": total_conversations,
-        "status_breakdown": [
-            {"status": status, "count": count}
-            for status, count in status_stats
-        ],
-        "daily_stats": [
-            {
-                "date": stat.date.isoformat(),
-                "total_calls": stat.total_calls,
-                "successful_calls": stat.successful_calls,
-                "success_rate": (stat.successful_calls / stat.total_calls * 100) if stat.total_calls > 0 else 0
-            }
-            for stat in daily_stats
-        ],
-        "average_duration": round(avg_duration, 2) if avg_duration else 0
-    }

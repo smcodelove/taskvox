@@ -1,5 +1,6 @@
 """
-TasKvox AI - Database Models
+TasKvox AI - Simple Models (Current working version)
+Replace your app/models.py with this - keeps existing structure
 """
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import relationship

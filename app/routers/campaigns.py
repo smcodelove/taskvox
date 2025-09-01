@@ -1,5 +1,6 @@
 """
-TasKvox AI - Campaigns Router
+TasKvox AI - Simple Working Campaigns Router
+Replace your app/routers/campaigns.py with this for now
 """
 import io
 import csv
@@ -19,7 +20,7 @@ templates = Jinja2Templates(directory="app/templates")
 @router.get("", response_class=HTMLResponse)
 async def campaigns_page(
     request: Request,
-    current_user: models.User = Depends(auth.get_current_active_user),
+    current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
     db: Session = Depends(get_db)
 ):
     """Campaigns management page"""
@@ -42,69 +43,59 @@ async def campaigns_page(
         }
     )
 
-@router.get("/api", response_model=List[schemas.Campaign])
-async def get_campaigns_api(
-    current_user: models.User = Depends(auth.get_current_active_user),
-    db: Session = Depends(get_db)
-):
-    """Get all campaigns for current user"""
-    campaigns = db.query(models.Campaign)\
-        .filter(models.Campaign.user_id == current_user.id)\
-        .order_by(models.Campaign.created_at.desc()).all()
-    return campaigns
-
-@router.post("/api", response_model=schemas.Campaign)
-async def create_campaign_api(
-    campaign: schemas.CampaignCreate,
-    current_user: models.User = Depends(auth.get_current_active_user),
-    db: Session = Depends(get_db)
-):
-    """Create new campaign via API"""
-    return await create_campaign_internal(campaign, current_user, db)
-
 @router.post("")
 async def create_campaign_form(
     request: Request,
     name: str = Form(...),
     agent_id: int = Form(...),
     csv_file: UploadFile = File(...),
-    current_user: models.User = Depends(auth.get_current_active_user),
+    current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
     db: Session = Depends(get_db)
 ):
     """Create campaign from form submission"""
     try:
         # Validate CSV file
         if not csv_file.filename.endswith('.csv'):
-            raise HTTPException(status_code=400, detail="File must be a CSV")
+            return RedirectResponse(url="/campaigns?error=File must be CSV", status_code=302)
+        
+        # Verify agent exists
+        agent = db.query(models.Agent)\
+            .filter(models.Agent.id == agent_id, models.Agent.user_id == current_user.id)\
+            .first()
+        
+        if not agent:
+            return RedirectResponse(url="/campaigns?error=Agent not found", status_code=302)
         
         # Read and parse CSV
         content = await csv_file.read()
         csv_content = content.decode('utf-8')
-        
-        # Parse CSV using built-in csv module
         csv_reader = csv.DictReader(io.StringIO(csv_content))
         
-        # Get fieldnames and validate required columns
+        # Validate required columns
         fieldnames = csv_reader.fieldnames or []
-        required_columns = ['phone_number']
-        missing_columns = [col for col in required_columns if col not in fieldnames]
-        if missing_columns:
-            raise HTTPException(
-                status_code=400,
-                detail=f"CSV missing required columns: {', '.join(missing_columns)}"
-            )
+        if 'phone_number' not in fieldnames:
+            return RedirectResponse(url="/campaigns?error=CSV must contain phone_number column", status_code=302)
         
         # Create campaign
-        campaign_data = schemas.CampaignCreate(name=name, agent_id=agent_id)
-        campaign = await create_campaign_internal(campaign_data, current_user, db)
+        campaign = models.Campaign(
+            user_id=current_user.id,
+            agent_id=agent_id,
+            name=name,
+            status="pending"
+        )
+        
+        db.add(campaign)
+        db.commit()
+        db.refresh(campaign)
         
         # Process contacts and create conversations
         contacts_processed = 0
+        
         for row in csv_reader:
             phone_number = str(row.get('phone_number', '')).strip()
             contact_name = str(row.get('name', '')).strip() if 'name' in row else None
             
-            if phone_number and phone_number != 'nan' and phone_number:
+            if phone_number and phone_number != 'nan':
                 conversation = models.Conversation(
                     user_id=current_user.id,
                     agent_id=agent_id,
@@ -120,129 +111,15 @@ async def create_campaign_form(
         campaign.total_contacts = contacts_processed
         db.commit()
         
-        return RedirectResponse(url="/campaigns", status_code=302)
+        return RedirectResponse(url=f"/campaigns?success=Campaign created with {contacts_processed} contacts", status_code=302)
         
     except Exception as e:
-        campaigns = db.query(models.Campaign)\
-            .filter(models.Campaign.user_id == current_user.id).all()
-        agents = db.query(models.Agent)\
-            .filter(models.Agent.user_id == current_user.id, models.Agent.is_active == True).all()
-        
-        return templates.TemplateResponse(
-            "campaigns.html",
-            {
-                "request": request,
-                "title": "Voice Campaigns - TasKvox AI",
-                "user": current_user,
-                "campaigns": campaigns,
-                "agents": agents,
-                "error": str(e)
-            }
-        )
-
-async def create_campaign_internal(
-    campaign: schemas.CampaignCreate,
-    current_user: models.User,
-    db: Session
-) -> models.Campaign:
-    """Internal function to create campaign"""
-    
-    # Verify agent exists and belongs to user
-    agent = db.query(models.Agent)\
-        .filter(models.Agent.id == campaign.agent_id, models.Agent.user_id == current_user.id)\
-        .first()
-    
-    if not agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
-    
-    # Create campaign in database
-    db_campaign = models.Campaign(
-        user_id=current_user.id,
-        agent_id=campaign.agent_id,
-        name=campaign.name,
-        status="pending"
-    )
-    
-    db.add(db_campaign)
-    db.commit()
-    db.refresh(db_campaign)
-    
-    return db_campaign
-
-@router.get("/{campaign_id}", response_model=schemas.Campaign)
-async def get_campaign(
-    campaign_id: int,
-    current_user: models.User = Depends(auth.get_current_active_user),
-    db: Session = Depends(get_db)
-):
-    """Get specific campaign"""
-    campaign = db.query(models.Campaign)\
-        .filter(models.Campaign.id == campaign_id, models.Campaign.user_id == current_user.id)\
-        .first()
-    
-    if not campaign:
-        raise HTTPException(status_code=404, detail="Campaign not found")
-    
-    return campaign
-
-@router.put("/{campaign_id}", response_model=schemas.Campaign)
-async def update_campaign(
-    campaign_id: int,
-    campaign_update: schemas.CampaignUpdate,
-    current_user: models.User = Depends(auth.get_current_active_user),
-    db: Session = Depends(get_db)
-):
-    """Update campaign"""
-    campaign = db.query(models.Campaign)\
-        .filter(models.Campaign.id == campaign_id, models.Campaign.user_id == current_user.id)\
-        .first()
-    
-    if not campaign:
-        raise HTTPException(status_code=404, detail="Campaign not found")
-    
-    # Update fields
-    if campaign_update.name is not None:
-        campaign.name = campaign_update.name
-    if campaign_update.status is not None:
-        campaign.status = campaign_update.status
-    if campaign_update.total_contacts is not None:
-        campaign.total_contacts = campaign_update.total_contacts
-    if campaign_update.completed_calls is not None:
-        campaign.completed_calls = campaign_update.completed_calls
-    if campaign_update.successful_calls is not None:
-        campaign.successful_calls = campaign_update.successful_calls
-    if campaign_update.failed_calls is not None:
-        campaign.failed_calls = campaign_update.failed_calls
-    
-    db.commit()
-    db.refresh(campaign)
-    
-    return campaign
-
-@router.delete("/{campaign_id}")
-async def delete_campaign(
-    campaign_id: int,
-    current_user: models.User = Depends(auth.get_current_active_user),
-    db: Session = Depends(get_db)
-):
-    """Delete campaign"""
-    campaign = db.query(models.Campaign)\
-        .filter(models.Campaign.id == campaign_id, models.Campaign.user_id == current_user.id)\
-        .first()
-    
-    if not campaign:
-        raise HTTPException(status_code=404, detail="Campaign not found")
-    
-    # Delete from database (conversations will be deleted via cascade)
-    db.delete(campaign)
-    db.commit()
-    
-    return {"message": "Campaign deleted successfully"}
+        return RedirectResponse(url=f"/campaigns?error=Error creating campaign: {str(e)}", status_code=302)
 
 @router.post("/{campaign_id}/launch")
 async def launch_campaign(
     campaign_id: int,
-    current_user: models.User = Depends(auth.get_current_active_user),
+    current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
     db: Session = Depends(get_db)
 ):
     """Launch campaign - start making calls"""
@@ -256,47 +133,40 @@ async def launch_campaign(
     if campaign.status != "pending":
         raise HTTPException(status_code=400, detail="Campaign can only be launched from pending status")
     
-    # Check if user has ElevenLabs API key
+    # Check API key
     if not current_user.elevenlabs_api_key:
-        raise HTTPException(
-            status_code=400,
-            detail="ElevenLabs API key not configured"
-        )
+        raise HTTPException(status_code=400, detail="ElevenLabs API key not configured")
     
     # Get agent
     agent = db.query(models.Agent).filter(models.Agent.id == campaign.agent_id).first()
-    if not agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
+    if not agent or not agent.elevenlabs_agent_id:
+        raise HTTPException(status_code=400, detail="Agent not found or not linked to ElevenLabs")
     
-    # Get pending conversations for this campaign
+    # Get pending conversations
     conversations = db.query(models.Conversation)\
         .filter(models.Conversation.campaign_id == campaign_id, models.Conversation.status == "pending")\
-        .all()
+        .limit(5).all()  # Limit to 5 calls for testing
     
     if not conversations:
-        raise HTTPException(status_code=400, detail="No contacts to call in this campaign")
+        raise HTTPException(status_code=400, detail="No contacts to call")
     
     # Update campaign status
     campaign.status = "running"
     db.commit()
     
-    # Initialize ElevenLabs client
+    # Make calls using ElevenLabs
     client = ElevenLabsClient(current_user.elevenlabs_api_key)
-    
-    # Start making calls (in a real app, this would be done asynchronously)
     successful_calls = 0
     failed_calls = 0
     
     for conversation in conversations:
         try:
-            # Make phone call
-            result = await client.make_phone_call(
+            result = await client.make_single_call(
                 agent.elevenlabs_agent_id,
                 conversation.phone_number
             )
             
             if result["success"]:
-                # Update conversation with ElevenLabs conversation ID
                 conversation.elevenlabs_conversation_id = result["call"]["conversation_id"]
                 conversation.status = "in_progress"
                 successful_calls += 1
@@ -316,7 +186,7 @@ async def launch_campaign(
     campaign.successful_calls = successful_calls
     campaign.failed_calls = failed_calls
     
-    if successful_calls + failed_calls >= campaign.total_contacts:
+    if successful_calls + failed_calls >= len(conversations):
         campaign.status = "completed"
     
     db.commit()
@@ -324,13 +194,14 @@ async def launch_campaign(
     return {
         "message": "Campaign launched successfully",
         "successful_calls": successful_calls,
-        "failed_calls": failed_calls
+        "failed_calls": failed_calls,
+        "note": "Limited to 5 calls for testing"
     }
 
 @router.get("/{campaign_id}/conversations")
 async def get_campaign_conversations(
     campaign_id: int,
-    current_user: models.User = Depends(auth.get_current_active_user),
+    current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
     db: Session = Depends(get_db)
 ):
     """Get all conversations for a campaign"""
@@ -358,13 +229,13 @@ async def get_campaign_conversations(
         for conv in conversations
     ]
 
-@router.post("/{campaign_id}/pause")
-async def pause_campaign(
+@router.delete("/{campaign_id}")
+async def delete_campaign(
     campaign_id: int,
-    current_user: models.User = Depends(auth.get_current_active_user),
+    current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    """Pause a running campaign"""
+    """Delete campaign"""
     campaign = db.query(models.Campaign)\
         .filter(models.Campaign.id == campaign_id, models.Campaign.user_id == current_user.id)\
         .first()
@@ -372,32 +243,8 @@ async def pause_campaign(
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
     
-    if campaign.status != "running":
-        raise HTTPException(status_code=400, detail="Campaign is not running")
-    
-    campaign.status = "paused"
+    # Delete campaign (conversations will be deleted via cascade)
+    db.delete(campaign)
     db.commit()
     
-    return {"message": "Campaign paused successfully"}
-
-@router.post("/{campaign_id}/resume")
-async def resume_campaign(
-    campaign_id: int,
-    current_user: models.User = Depends(auth.get_current_active_user),
-    db: Session = Depends(get_db)
-):
-    """Resume a paused campaign"""
-    campaign = db.query(models.Campaign)\
-        .filter(models.Campaign.id == campaign_id, models.Campaign.user_id == current_user.id)\
-        .first()
-    
-    if not campaign:
-        raise HTTPException(status_code=404, detail="Campaign not found")
-    
-    if campaign.status != "paused":
-        raise HTTPException(status_code=400, detail="Campaign is not paused")
-    
-    campaign.status = "running"
-    db.commit()
-    
-    return {"message": "Campaign resumed successfully"}
+    return {"message": "Campaign deleted successfully"}
