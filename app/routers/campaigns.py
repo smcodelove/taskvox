@@ -148,7 +148,7 @@ async def launch_campaign(
     # Get pending conversations
     conversations = db.query(models.Conversation)\
         .filter(models.Conversation.campaign_id == campaign_id, models.Conversation.status == "pending")\
-        .limit(5).all()  # Limit to 5 calls for testing
+        #.limit(5).all()  # Limit to 5 calls for testing
     
     if not conversations:
         raise HTTPException(status_code=400, detail="No contacts to call")
