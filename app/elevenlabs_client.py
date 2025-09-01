@@ -59,31 +59,52 @@ class ElevenLabsClient:
     # REPLACE THE create_agent METHOD IN YOUR EXISTING CLIENT WITH THIS
 
     async def create_agent(self, config: Dict) -> Dict:
-        """Create new conversational agent with detailed debugging"""
+        """Create new conversational agent with CORRECT ElevenLabs API structure"""
         try:
             print(f"🔍 Creating agent with config: {config}")
             
-            # Updated agent config based on latest ElevenLabs API
+            # CORRECT: ElevenLabs API expects this EXACT structure
             agent_config = {
-                "name": config.get("name", "TasKvox Agent"),
-                "voice_id": config.get("voice_id"),
                 "conversation_config": {
                     "agent": {
                         "prompt": {
-                            "prompt": config.get("system_prompt", "You are a helpful AI assistant."),
-                            # Using new tool_ids format instead of deprecated tools
-                            "tool_ids": [],  # Empty for basic agents
-                            "built_in_tools": ["end_call"]  # System tools
+                            "prompt": config.get("system_prompt", "You are a helpful AI assistant.")
                         },
+                        "first_message": "Hi! How can I help you today?",
                         "language": config.get("language", "en"),
-                        "max_duration_seconds": config.get("max_duration", 300)
+                        "max_duration_seconds": config.get("max_duration", 600)
+                    },
+                    "asr": {
+                        "quality": "nova",
+                        "user_input_audio_format": "pcm_16000"
+                    },
+                    "tts": {
+                        "voice_id": config.get("voice_id"),
+                        "model_id": "eleven_turbo_v2_5",
+                        "voice_settings": {
+                            "stability": 0.5,
+                            "similarity_boost": 0.75,
+                            "style": 0.0,
+                            "use_speaker_boost": True
+                        },
+                        "pronunciation_dictionary_locators": [],
+                        "output_audio_format": "pcm_16000"
                     }
-                }
+                },
+                "platform_settings": {
+                    "widget_config": {
+                        "avatar_url": "",
+                        "background_color": "#ffffff", 
+                        "accent_color": "#2563eb"
+                    }
+                },
+                "name": config.get("name", "TasKvox Agent")
             }
             
-            print(f"📡 Sending agent config: {agent_config}")
+            print(f"📡 Sending CORRECT agent config: {agent_config}")
             
             async with httpx.AsyncClient() as client:
+                # CORRECT endpoint from docs
                 response = await client.post(
                     f"{self.base_url}/convai/agents",
                     headers=self.headers,
@@ -112,7 +133,7 @@ class ElevenLabsClient:
                     print(f"❌ HTTP Error {response.status_code}")
                     try:
                         error_data = response.json()
-                        error_msg = error_data.get("message", error_data.get("error", response_text))
+                        error_msg = error_data.get("message", error_data.get("detail", response_text))
                     except:
                         error_msg = response_text
                     
@@ -120,7 +141,7 @@ class ElevenLabsClient:
                         "success": False, 
                         "error": f"HTTP {response.status_code}: {error_msg}"
                     }
-                    
+                        
         except httpx.TimeoutException:
             print("❌ Timeout error")
             return {"success": False, "error": "Request timeout"}
@@ -132,6 +153,7 @@ class ElevenLabsClient:
             import traceback
             traceback.print_exc()
             return {"success": False, "error": f"Unexpected error: {str(e)}"}
+
     
     async def list_agents(self) -> Dict:
         """List all user agents"""
@@ -279,7 +301,7 @@ class ElevenLabsClient:
             return {"success": False, "error": str(e)}
     
     async def make_single_call(self, agent_id: str, phone_number: str, metadata: Dict = None) -> Dict:
-        """Make a single phone call (updated endpoint)"""
+        """Make a single phone call with CORRECT endpoint"""
         try:
             call_config = {
                 "agent_id": agent_id,
@@ -290,19 +312,19 @@ class ElevenLabsClient:
                 call_config["metadata"] = metadata
             
             async with httpx.AsyncClient() as client:
+                # CORRECT phone call endpoint
                 response = await client.post(
-                    f"{self.base_url}/convai/phone-calls",
+                    f"{self.base_url}/convai/conversations/phone",
                     headers=self.headers,
                     json=call_config,
                     timeout=30.0
                 )
                 
-                if response.status_code == 201:
+                if response.status_code in [200, 201]:
                     return {"success": True, "call": response.json()}
                 else:
                     return {"success": False, "error": f"HTTP {response.status_code}: {response.text}"}
         except Exception as e:
-            logger.error(f"Failed to make phone call: {e}")
             return {"success": False, "error": str(e)}
     
     async def get_conversation(self, conversation_id: str) -> Dict:

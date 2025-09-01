@@ -1,6 +1,9 @@
+# FILE: app/routers/settings.py
+# REPLACE YOUR ENTIRE app/routers/settings.py WITH THIS
+
 """
-TasKvox AI - Settings Router
-API Key Management and User Profile Settings
+TasKvox AI - Settings Router (White-Label Version)
+Voice AI API Key Management and User Profile Settings
 """
 from fastapi import APIRouter, Depends, HTTPException, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -20,18 +23,18 @@ async def settings_page(
     current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    """Settings management page"""
+    """Settings management page (white-label)"""
     
     # Test API key if it exists
     api_key_status = "Not configured"
-    if current_user.elevenlabs_api_key:
+    if current_user.voice_api_key:  # CHANGED: White-label field
         try:
-            client = ElevenLabsClient(current_user.elevenlabs_api_key)
+            client = ElevenLabsClient(current_user.voice_api_key)  # Internal only
             test_result = await client.test_connection()
             if test_result["success"]:
-                api_key_status = "✅ Valid"
+                api_key_status = "✅ Connected"
             else:
-                api_key_status = "❌ Invalid"
+                api_key_status = "❌ Connection Failed"
         except:
             api_key_status = "❌ Error"
     
@@ -42,7 +45,7 @@ async def settings_page(
             "title": "Settings - TasKvox AI",
             "user": current_user,
             "api_key_status": api_key_status,
-            "has_api_key": bool(current_user.elevenlabs_api_key)
+            "has_api_key": bool(current_user.voice_api_key)  # CHANGED: White-label field
         }
     )
 
@@ -53,10 +56,10 @@ async def update_api_key(
     current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    """Update ElevenLabs API key"""
+    """Update Voice AI API key (white-label)"""
     try:
         # Test the API key first
-        client = ElevenLabsClient(api_key)
+        client = ElevenLabsClient(api_key)  # Internal only
         test_result = await client.test_connection()
         
         if not test_result["success"]:
@@ -66,14 +69,14 @@ async def update_api_key(
                     "request": request,
                     "title": "Settings - TasKvox AI",
                     "user": current_user,
-                    "error": f"Invalid API key: {test_result.get('error', 'Connection failed')}",
-                    "api_key_status": "❌ Invalid",
-                    "has_api_key": bool(current_user.elevenlabs_api_key)
+                    "error": f"Invalid Voice AI API key: {test_result.get('error', 'Connection failed')}",
+                    "api_key_status": "❌ Connection Failed",
+                    "has_api_key": bool(current_user.voice_api_key)  # CHANGED: White-label field
                 }
             )
         
         # Update the API key
-        current_user.elevenlabs_api_key = api_key
+        current_user.voice_api_key = api_key  # CHANGED: White-label field
         db.commit()
         
         return templates.TemplateResponse(
@@ -82,8 +85,8 @@ async def update_api_key(
                 "request": request,
                 "title": "Settings - TasKvox AI",
                 "user": current_user,
-                "success": "API key updated successfully!",
-                "api_key_status": "✅ Valid",
+                "success": "Voice AI API key updated successfully!",
+                "api_key_status": "✅ Connected",
                 "has_api_key": True
             }
         )
@@ -95,9 +98,9 @@ async def update_api_key(
                 "request": request,
                 "title": "Settings - TasKvox AI",
                 "user": current_user,
-                "error": f"Error updating API key: {str(e)}",
+                "error": f"Error updating Voice AI API key: {str(e)}",
                 "api_key_status": "❌ Error",
-                "has_api_key": bool(current_user.elevenlabs_api_key)
+                "has_api_key": bool(current_user.voice_api_key)  # CHANGED: White-label field
             }
         )
 
@@ -111,7 +114,7 @@ async def update_profile(
     current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    """Update user profile"""
+    """Update user profile (white-label)"""
     try:
         # Update email if changed
         if email != current_user.email:
@@ -154,8 +157,8 @@ async def update_profile(
                 "title": "Settings - TasKvox AI",
                 "user": current_user,
                 "error": str(e.detail),
-                "api_key_status": "✅ Valid" if current_user.elevenlabs_api_key else "Not configured",
-                "has_api_key": bool(current_user.elevenlabs_api_key)
+                "api_key_status": "✅ Connected" if current_user.voice_api_key else "Not configured",  # CHANGED
+                "has_api_key": bool(current_user.voice_api_key)  # CHANGED: White-label field
             }
         )
 
@@ -164,17 +167,17 @@ async def remove_api_key(
     current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    """Remove ElevenLabs API key"""
-    current_user.elevenlabs_api_key = None
+    """Remove Voice AI API key (white-label)"""
+    current_user.voice_api_key = None  # CHANGED: White-label field
     db.commit()
-    return {"message": "API key removed successfully"}
+    return {"message": "Voice AI API key removed successfully"}
 
 @router.get("/usage-stats")
 async def get_usage_stats(
     current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    """Get user usage statistics"""
+    """Get user usage statistics (white-label)"""
     
     total_agents = db.query(models.Agent).filter(
         models.Agent.user_id == current_user.id

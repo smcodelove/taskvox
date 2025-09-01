@@ -1,5 +1,9 @@
+# FILE: app/schemas.py
+# REPLACE YOUR ENTIRE app/schemas.py WITH THIS
+
 """
-TasKvox AI - Pydantic Schemas
+TasKvox AI - Pydantic Schemas (White-Label Version)
+No ElevenLabs references visible to client
 """
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
@@ -14,7 +18,7 @@ class UserCreate(UserBase):
 
 class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
-    elevenlabs_api_key: Optional[str] = None
+    voice_api_key: Optional[str] = None  # CHANGED: White-label field name
 
 class User(UserBase):
     id: int
@@ -42,7 +46,7 @@ class AgentUpdate(BaseModel):
 class Agent(AgentBase):
     id: int
     user_id: int
-    elevenlabs_agent_id: Optional[str] = None
+    external_agent_id: Optional[str] = None  # CHANGED: White-label field name
     is_active: bool
     created_at: datetime
     
@@ -99,7 +103,7 @@ class Conversation(ConversationBase):
     user_id: int
     agent_id: int
     campaign_id: Optional[int] = None
-    elevenlabs_conversation_id: Optional[str] = None
+    external_conversation_id: Optional[str] = None  # CHANGED: White-label field name
     status: Optional[str] = None
     duration_seconds: Optional[int] = None
     transcript: Optional[str] = None

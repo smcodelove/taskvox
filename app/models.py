@@ -1,6 +1,9 @@
+# FILE: app/models.py
+# REPLACE YOUR ENTIRE app/models.py WITH THIS
+
 """
-TasKvox AI - Simple Models (Current working version)
-Replace your app/models.py with this - keeps existing structure
+TasKvox AI - Database Models (White-Label Version)
+No ElevenLabs references visible to client
 """
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
@@ -13,7 +16,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String(255), unique=True, index=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
-    elevenlabs_api_key = Column(Text, nullable=True)
+    voice_api_key = Column(Text, nullable=True)  # CHANGED: White-label field name
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -28,7 +31,7 @@ class Agent(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    elevenlabs_agent_id = Column(String(255), nullable=True)
+    external_agent_id = Column(String(255), nullable=True)  # CHANGED: White-label field name
     name = Column(String(255), nullable=False)
     voice_id = Column(String(255), nullable=True)
     system_prompt = Column(Text, nullable=True)
@@ -69,7 +72,7 @@ class Conversation(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     agent_id = Column(Integer, ForeignKey("agents.id"), nullable=False)
     campaign_id = Column(Integer, ForeignKey("campaigns.id"), nullable=True)
-    elevenlabs_conversation_id = Column(String(255), nullable=True)
+    external_conversation_id = Column(String(255), nullable=True)  # CHANGED: White-label field name
     phone_number = Column(String(20), nullable=True)
     contact_name = Column(String(255), nullable=True)
     status = Column(String(50), nullable=True)  # completed, failed, in_progress

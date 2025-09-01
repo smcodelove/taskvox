@@ -1,9 +1,9 @@
-# FILE PATH: app/routers/agents.py
-# REPLACE YOUR EXISTING app/routers/agents.py WITH THIS
+# FILE: app/routers/agents.py
+# REPLACE YOUR ENTIRE app/routers/agents.py WITH THIS
 
 """
-TasKvox AI - Agents Router with Working ElevenLabs Sync
-Path: app/routers/agents.py
+TasKvox AI - Agents Router (White-Label Version)
+No ElevenLabs references visible to client
 """
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Request, Form
@@ -24,7 +24,7 @@ async def agents_page(
     current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    """Agents management page"""
+    """Voice agents management page (white-label)"""
     
     # Get local agents from database
     local_agents = db.query(models.Agent)\
@@ -33,75 +33,58 @@ async def agents_page(
     
     # Get available voices if API key is configured
     voices = []
-    elevenlabs_agents = []
     
-    if current_user.elevenlabs_api_key:
-        client = ElevenLabsClient(current_user.elevenlabs_api_key)
+    if current_user.voice_api_key:  # CHANGED: White-label field
+        client = ElevenLabsClient(current_user.voice_api_key)  # Internal only
         
         # Get voices
         voices_result = await client.get_voices()
         if voices_result["success"]:
             voices = voices_result["voices"]
-        
-        # Get existing ElevenLabs agents for sync button
-        agents_result = await client.list_agents()
-        if agents_result["success"]:
-            elevenlabs_agents = agents_result.get("agents", [])
     
     return templates.TemplateResponse(
         "agents.html",
         {
             "request": request,
-            "title": "AI Agents - TasKvox AI",
+            "title": "Voice Agents - TasKvox AI",
             "user": current_user,
             "agents": local_agents,
-            "voices": voices,
-            "elevenlabs_agents": elevenlabs_agents
+            "voices": voices
         }
     )
 
-@router.post("/sync-elevenlabs")
-async def sync_elevenlabs_agents(
+@router.post("/sync-voice-agents")  # CHANGED: White-label endpoint
+async def sync_voice_agents(
     current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    """Sync existing ElevenLabs agents to local database"""
+    """Sync voice agents from external provider"""
     
-    if not current_user.elevenlabs_api_key:
-        raise HTTPException(status_code=400, detail="ElevenLabs API key not configured")
+    if not current_user.voice_api_key:  # CHANGED: White-label field
+        raise HTTPException(status_code=400, detail="Voice AI API key not configured")
     
     try:
-        client = ElevenLabsClient(current_user.elevenlabs_api_key)
+        client = ElevenLabsClient(current_user.voice_api_key)  # Internal only
         result = await client.list_agents()
         
         if not result["success"]:
             raise HTTPException(status_code=400, detail=f"Failed to fetch agents: {result.get('error', 'Unknown error')}")
         
-        # Get agents list from response
         agents_data = result.get("agents", [])
         
-        # Handle different response structures
         if isinstance(agents_data, dict):
             agents_data = agents_data.get("agents", [])
         
         synced_count = 0
         
-        # Debug print
-        print(f"ElevenLabs response: {result}")
-        print(f"Agents data type: {type(agents_data)}")
-        print(f"Agents data: {agents_data}")
-        
-        # Handle the response properly
         if isinstance(agents_data, list):
             for agent_item in agents_data:
                 try:
-                    # Handle different agent formats
                     if isinstance(agent_item, dict):
                         agent_id = agent_item.get("agent_id") or agent_item.get("id")
-                        agent_name = agent_item.get("name", f"Agent {agent_id[:8] if agent_id else 'Unknown'}")
+                        agent_name = agent_item.get("name", f"Voice Agent {agent_id[:8] if agent_id else 'Unknown'}")
                         voice_id = agent_item.get("voice_id")
                         
-                        # Handle nested prompt
                         system_prompt = None
                         if "prompt" in agent_item:
                             prompt_data = agent_item["prompt"]
@@ -111,15 +94,6 @@ async def sync_elevenlabs_agents(
                                 system_prompt = str(prompt_data)
                         elif "system_prompt" in agent_item:
                             system_prompt = agent_item["system_prompt"]
-                        
-                    elif isinstance(agent_item, str):
-                        # If it's just an ID string
-                        agent_id = agent_item
-                        agent_name = f"Imported Agent {agent_id[:8]}"
-                        voice_id = None
-                        system_prompt = None
-                    else:
-                        continue
                     
                     if not agent_id:
                         continue
@@ -128,13 +102,13 @@ async def sync_elevenlabs_agents(
                     existing = db.query(models.Agent)\
                         .filter(
                             models.Agent.user_id == current_user.id,
-                            models.Agent.elevenlabs_agent_id == agent_id
+                            models.Agent.external_agent_id == agent_id  # CHANGED: White-label field
                         ).first()
                     
                     if not existing:
                         new_agent = models.Agent(
                             user_id=current_user.id,
-                            elevenlabs_agent_id=agent_id,
+                            external_agent_id=agent_id,  # CHANGED: White-label field
                             name=agent_name,
                             voice_id=voice_id,
                             system_prompt=system_prompt,
@@ -142,7 +116,7 @@ async def sync_elevenlabs_agents(
                         )
                         db.add(new_agent)
                         synced_count += 1
-                        print(f"Added agent: {agent_name} ({agent_id})")
+                        print(f"Added voice agent: {agent_name} ({agent_id})")
                         
                 except Exception as e:
                     print(f"Error processing agent {agent_item}: {e}")
@@ -151,17 +125,14 @@ async def sync_elevenlabs_agents(
         db.commit()
         
         return {
-            "message": f"Successfully synced {synced_count} agents from ElevenLabs",
+            "message": f"Successfully synced {synced_count} voice agents",
             "synced_count": synced_count,
-            "total_elevenlabs_agents": len(agents_data) if isinstance(agents_data, list) else 0
+            "total_external_agents": len(agents_data) if isinstance(agents_data, list) else 0
         }
         
     except Exception as e:
         print(f"Sync error: {e}")
-        raise HTTPException(status_code=500, detail=f"Error syncing agents: {str(e)}")
-
-# FILE PATH: app/routers/agents.py
-# UPDATE YOUR create_agent_form FUNCTION WITH THIS DEBUG VERSION
+        raise HTTPException(status_code=500, detail=f"Error syncing voice agents: {str(e)}")
 
 @router.post("")
 async def create_agent_form(
@@ -172,19 +143,12 @@ async def create_agent_form(
     current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    """Create agent from form submission with detailed debugging"""
+    """Create voice agent (white-label)"""
     try:
-        elevenlabs_agent_id = None
-        error_message = None
+        external_agent_id = None
         
-        if current_user.elevenlabs_api_key:
-            # Try to create in ElevenLabs with detailed logging
-            client = ElevenLabsClient(current_user.elevenlabs_api_key)
-            
-            print(f"🔍 Creating agent in ElevenLabs...")
-            print(f"   Name: {name}")
-            print(f"   Voice ID: {voice_id}")
-            print(f"   System Prompt: {system_prompt[:100]}...")
+        if current_user.voice_api_key:  # CHANGED: White-label field
+            client = ElevenLabsClient(current_user.voice_api_key)  # Internal only
             
             result = await client.create_agent({
                 "name": name,
@@ -192,39 +156,21 @@ async def create_agent_form(
                 "system_prompt": system_prompt
             })
             
-            print(f"📡 ElevenLabs API Response:")
-            print(f"   Success: {result['success']}")
-            print(f"   Full Response: {result}")
-            
             if result["success"]:
-                # Extract agent ID with multiple fallback options
                 agent_data = result.get("agent", {})
-                print(f"   Agent Data: {agent_data}")
-                
-                if isinstance(agent_data, dict):
-                    elevenlabs_agent_id = (
-                        agent_data.get("agent_id") or 
-                        agent_data.get("id") or 
-                        agent_data.get("agentId")
-                    )
-                elif isinstance(agent_data, str):
-                    elevenlabs_agent_id = agent_data
-                
-                print(f"   Extracted Agent ID: {elevenlabs_agent_id}")
-                
-                if not elevenlabs_agent_id:
-                    print("❌ Could not extract agent ID from response")
-                    error_message = "Agent created but no ID returned from ElevenLabs"
+                external_agent_id = (
+                    agent_data.get("agent_id") or 
+                    agent_data.get("id") or 
+                    agent_data.get("agentId")
+                )
+                print(f"✅ External voice agent created: {external_agent_id}")
             else:
-                error_message = result.get('error', 'Unknown ElevenLabs error')
-                print(f"❌ ElevenLabs creation failed: {error_message}")
-        else:
-            print("⚠️  No API key - creating local agent only")
+                print(f"❌ External voice agent creation failed: {result.get('error', 'Unknown error')}")
         
-        # Create in local database regardless
+        # Create in local database
         db_agent = models.Agent(
             user_id=current_user.id,
-            elevenlabs_agent_id=elevenlabs_agent_id,
+            external_agent_id=external_agent_id,  # CHANGED: White-label field
             name=name,
             voice_id=voice_id,
             system_prompt=system_prompt,
@@ -235,22 +181,15 @@ async def create_agent_form(
         db.commit()
         db.refresh(db_agent)
         
-        print(f"✅ Local agent created with ID: {db_agent.id}")
-        
-        # Determine success message
-        if elevenlabs_agent_id:
-            status_msg = f"Agent created successfully (ElevenLabs ID: {elevenlabs_agent_id[:12]}...)"
-        elif error_message:
-            status_msg = f"Agent created locally but ElevenLabs failed: {error_message}"
+        if external_agent_id:
+            success_msg = f"Voice agent created successfully!"
         else:
-            status_msg = "Agent created (local only - configure API key for ElevenLabs sync)"
+            success_msg = "Voice agent created locally (Voice AI connection needed for full functionality)"
         
-        return RedirectResponse(url=f"/agents?success={status_msg}", status_code=302)
+        return RedirectResponse(url=f"/agents?success={success_msg}", status_code=302)
         
     except Exception as e:
-        print(f"💥 Exception during agent creation: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"💥 Exception during voice agent creation: {e}")
         return RedirectResponse(url=f"/agents?error=Creation failed: {str(e)}", status_code=302)
 
 @router.post("/{agent_id}/test-call")
@@ -260,26 +199,25 @@ async def test_agent_call(
     current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    """Test agent with a phone call"""
+    """Test voice agent with phone call"""
     
     agent = db.query(models.Agent)\
         .filter(models.Agent.id == agent_id, models.Agent.user_id == current_user.id)\
         .first()
     
     if not agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
+        raise HTTPException(status_code=404, detail="Voice agent not found")
     
-    if not current_user.elevenlabs_api_key:
-        raise HTTPException(status_code=400, detail="ElevenLabs API key not configured")
+    if not current_user.voice_api_key:  # CHANGED: White-label field
+        raise HTTPException(status_code=400, detail="Voice AI API key not configured")
     
-    if not agent.elevenlabs_agent_id:
-        raise HTTPException(status_code=400, detail="Agent not linked to ElevenLabs")
+    if not agent.external_agent_id:  # CHANGED: White-label field
+        raise HTTPException(status_code=400, detail="Voice agent not linked to Voice AI service")
     
     try:
-        # Make test call
-        client = ElevenLabsClient(current_user.elevenlabs_api_key)
+        client = ElevenLabsClient(current_user.voice_api_key)  # Internal only
         result = await client.make_single_call(
-            agent.elevenlabs_agent_id,
+            agent.external_agent_id,  # CHANGED: White-label field
             phone_number
         )
         
@@ -293,7 +231,7 @@ async def test_agent_call(
         )
         
         if result["success"] and "call" in result:
-            conversation.elevenlabs_conversation_id = result["call"].get("conversation_id")
+            conversation.external_conversation_id = result["call"].get("conversation_id")  # CHANGED
         
         db.add(conversation)
         db.commit()
@@ -310,7 +248,6 @@ async def test_agent_call(
             }
             
     except Exception as e:
-        # Create failed conversation record
         conversation = models.Conversation(
             user_id=current_user.id,
             agent_id=agent.id,
@@ -329,44 +266,44 @@ async def delete_agent(
     current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    """Delete agent"""
+    """Delete voice agent"""
     
     agent = db.query(models.Agent)\
         .filter(models.Agent.id == agent_id, models.Agent.user_id == current_user.id)\
         .first()
     
     if not agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
+        raise HTTPException(status_code=404, detail="Voice agent not found")
     
-    # Delete from ElevenLabs if exists
-    if agent.elevenlabs_agent_id and current_user.elevenlabs_api_key:
+    # Delete from external service if exists
+    if agent.external_agent_id and current_user.voice_api_key:  # CHANGED: White-label fields
         try:
-            client = ElevenLabsClient(current_user.elevenlabs_api_key)
-            await client.delete_agent(agent.elevenlabs_agent_id)
+            client = ElevenLabsClient(current_user.voice_api_key)  # Internal only
+            await client.delete_agent(agent.external_agent_id)  # CHANGED: White-label field
         except Exception as e:
-            print(f"Failed to delete from ElevenLabs: {e}")
+            print(f"Failed to delete from external Voice AI service: {e}")
     
     # Delete from database
     db.delete(agent)
     db.commit()
     
-    return {"message": "Agent deleted successfully"}
+    return {"message": "Voice agent deleted successfully"}
 
 @router.get("/api/voices")
 async def get_voices(
     current_user: models.User = Depends(auth.get_current_active_user_from_cookie)
 ):
-    """Get available voices from ElevenLabs"""
-    if not current_user.elevenlabs_api_key:
-        raise HTTPException(status_code=400, detail="ElevenLabs API key not configured")
+    """Get available voice profiles"""
+    if not current_user.voice_api_key:  # CHANGED: White-label field
+        raise HTTPException(status_code=400, detail="Voice AI API key not configured")
     
-    client = ElevenLabsClient(current_user.elevenlabs_api_key)
+    client = ElevenLabsClient(current_user.voice_api_key)  # Internal only
     result = await client.get_voices()
     
     if not result["success"]:
         raise HTTPException(
             status_code=400,
-            detail=f"Failed to get voices: {result['error']}"
+            detail=f"Failed to get voice profiles: {result['error']}"
         )
     
     return result["voices"]

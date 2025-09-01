@@ -1,6 +1,9 @@
+# FILE: app/routers/history.py
+# REPLACE YOUR ENTIRE app/routers/history.py WITH THIS
+
 """
-TasKvox AI - Fixed History Router
-Replace your app/routers/history.py - fix db.func issue
+TasKvox AI - History Router (White-Label Version)
+No ElevenLabs references visible to client
 """
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, Query
@@ -27,7 +30,7 @@ async def history_page(
     current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    """Call history page with pagination and filters"""
+    """Call history page with pagination and filters (white-label)"""
     
     # Items per page
     per_page = 20
@@ -89,7 +92,7 @@ async def history_page(
             models.Conversation.status == "failed"
         ).count()
     
-    # Calculate total duration - FIXED: use func from sqlalchemy
+    # Calculate total duration
     total_duration_result = db.query(func.sum(models.Conversation.duration_seconds))\
         .filter(
             models.Conversation.user_id == current_user.id,
@@ -134,7 +137,7 @@ async def get_conversation_details(
     current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    """Get detailed conversation information"""
+    """Get detailed conversation information (white-label)"""
     
     conversation = db.query(models.Conversation)\
         .options(joinedload(models.Conversation.agent))\
@@ -158,7 +161,7 @@ async def get_conversation_details(
             "created_at": conversation.created_at.isoformat(),
             "agent_name": conversation.agent.name if conversation.agent else "Unknown",
             "campaign_name": conversation.campaign.name if conversation.campaign else "Direct Call",
-            "elevenlabs_conversation_id": conversation.elevenlabs_conversation_id
+            "external_conversation_id": conversation.external_conversation_id  # CHANGED: White-label field
         }
     }
 
@@ -168,7 +171,7 @@ async def delete_conversation(
     current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    """Delete a conversation record"""
+    """Delete a conversation record (white-label)"""
     
     conversation = db.query(models.Conversation)\
         .filter(

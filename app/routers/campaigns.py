@@ -1,6 +1,9 @@
+# FILE: app/routers/campaigns.py
+# REPLACE YOUR ENTIRE app/routers/campaigns.py WITH THIS
+
 """
-TasKvox AI - Simple Working Campaigns Router
-Replace your app/routers/campaigns.py with this for now
+TasKvox AI - Campaigns Router (White-Label Version)
+No ElevenLabs references visible to client
 """
 import io
 import csv
@@ -23,7 +26,7 @@ async def campaigns_page(
     current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    """Campaigns management page"""
+    """Voice campaigns management page (white-label)"""
     campaigns = db.query(models.Campaign)\
         .filter(models.Campaign.user_id == current_user.id)\
         .order_by(models.Campaign.created_at.desc()).all()
@@ -52,7 +55,7 @@ async def create_campaign_form(
     current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    """Create campaign from form submission"""
+    """Create voice campaign from form submission (white-label)"""
     try:
         # Validate CSV file
         if not csv_file.filename.endswith('.csv'):
@@ -64,7 +67,7 @@ async def create_campaign_form(
             .first()
         
         if not agent:
-            return RedirectResponse(url="/campaigns?error=Agent not found", status_code=302)
+            return RedirectResponse(url="/campaigns?error=Voice agent not found", status_code=302)
         
         # Read and parse CSV
         content = await csv_file.read()
@@ -111,10 +114,10 @@ async def create_campaign_form(
         campaign.total_contacts = contacts_processed
         db.commit()
         
-        return RedirectResponse(url=f"/campaigns?success=Campaign created with {contacts_processed} contacts", status_code=302)
+        return RedirectResponse(url=f"/campaigns?success=Voice campaign created with {contacts_processed} contacts", status_code=302)
         
     except Exception as e:
-        return RedirectResponse(url=f"/campaigns?error=Error creating campaign: {str(e)}", status_code=302)
+        return RedirectResponse(url=f"/campaigns?error=Error creating voice campaign: {str(e)}", status_code=302)
 
 @router.post("/{campaign_id}/launch")
 async def launch_campaign(
@@ -122,25 +125,25 @@ async def launch_campaign(
     current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    """Launch campaign - start making calls"""
+    """Launch voice campaign (white-label)"""
     campaign = db.query(models.Campaign)\
         .filter(models.Campaign.id == campaign_id, models.Campaign.user_id == current_user.id)\
         .first()
     
     if not campaign:
-        raise HTTPException(status_code=404, detail="Campaign not found")
+        raise HTTPException(status_code=404, detail="Voice campaign not found")
     
     if campaign.status != "pending":
         raise HTTPException(status_code=400, detail="Campaign can only be launched from pending status")
     
     # Check API key
-    if not current_user.elevenlabs_api_key:
-        raise HTTPException(status_code=400, detail="ElevenLabs API key not configured")
+    if not current_user.voice_api_key:  # CHANGED: White-label field
+        raise HTTPException(status_code=400, detail="Voice AI API key not configured")
     
     # Get agent
     agent = db.query(models.Agent).filter(models.Agent.id == campaign.agent_id).first()
-    if not agent or not agent.elevenlabs_agent_id:
-        raise HTTPException(status_code=400, detail="Agent not found or not linked to ElevenLabs")
+    if not agent or not agent.external_agent_id:  # CHANGED: White-label field
+        raise HTTPException(status_code=400, detail="Voice agent not found or not linked to Voice AI service")
     
     # Get pending conversations
     conversations = db.query(models.Conversation)\
@@ -154,20 +157,20 @@ async def launch_campaign(
     campaign.status = "running"
     db.commit()
     
-    # Make calls using ElevenLabs
-    client = ElevenLabsClient(current_user.elevenlabs_api_key)
+    # Make calls using Voice AI
+    client = ElevenLabsClient(current_user.voice_api_key)  # Internal only
     successful_calls = 0
     failed_calls = 0
     
     for conversation in conversations:
         try:
             result = await client.make_single_call(
-                agent.elevenlabs_agent_id,
+                agent.external_agent_id,  # CHANGED: White-label field
                 conversation.phone_number
             )
             
             if result["success"]:
-                conversation.elevenlabs_conversation_id = result["call"]["conversation_id"]
+                conversation.external_conversation_id = result["call"]["conversation_id"]  # CHANGED
                 conversation.status = "in_progress"
                 successful_calls += 1
             else:
@@ -192,7 +195,7 @@ async def launch_campaign(
     db.commit()
     
     return {
-        "message": "Campaign launched successfully",
+        "message": "Voice campaign launched successfully",
         "successful_calls": successful_calls,
         "failed_calls": failed_calls,
         "note": "Limited to 5 calls for testing"
@@ -204,13 +207,13 @@ async def get_campaign_conversations(
     current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    """Get all conversations for a campaign"""
+    """Get all conversations for a voice campaign (white-label)"""
     campaign = db.query(models.Campaign)\
         .filter(models.Campaign.id == campaign_id, models.Campaign.user_id == current_user.id)\
         .first()
     
     if not campaign:
-        raise HTTPException(status_code=404, detail="Campaign not found")
+        raise HTTPException(status_code=404, detail="Voice campaign not found")
     
     conversations = db.query(models.Conversation)\
         .filter(models.Conversation.campaign_id == campaign_id)\
@@ -235,16 +238,16 @@ async def delete_campaign(
     current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    """Delete campaign"""
+    """Delete voice campaign (white-label)"""
     campaign = db.query(models.Campaign)\
         .filter(models.Campaign.id == campaign_id, models.Campaign.user_id == current_user.id)\
         .first()
     
     if not campaign:
-        raise HTTPException(status_code=404, detail="Campaign not found")
+        raise HTTPException(status_code=404, detail="Voice campaign not found")
     
     # Delete campaign (conversations will be deleted via cascade)
     db.delete(campaign)
     db.commit()
     
-    return {"message": "Campaign deleted successfully"}
+    return {"message": "Voice campaign deleted successfully"}

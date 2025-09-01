@@ -1,5 +1,8 @@
+# FILE: app/routers/auth.py
+# REPLACE YOUR ENTIRE app/routers/auth.py WITH THIS
+
 """
-TasKvox AI - Authentication Router
+TasKvox AI - Authentication Router (White-Label Version)
 """
 from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Form
@@ -173,11 +176,11 @@ async def update_user_me(
     current_user: models.User = Depends(auth.get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """Update current user"""
+    """Update current user (white-label)"""
     if user_update.email:
         current_user.email = user_update.email
-    if user_update.elevenlabs_api_key:
-        current_user.elevenlabs_api_key = user_update.elevenlabs_api_key
+    if user_update.voice_api_key:  # CHANGED: White-label field
+        current_user.voice_api_key = user_update.voice_api_key
     
     db.commit()
     db.refresh(current_user)

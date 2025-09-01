@@ -1,45 +1,48 @@
+<!-- FILE PATH: app/templates/settings.html -->
+<!-- REPLACE YOUR ENTIRE settings.html WITH THIS WHITE-LABEL VERSION -->
+
 {% extends "base.html" %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
         <h1 class="h3 mb-1">Settings</h1>
-        <p class="text-muted">Manage your account and API configuration</p>
+        <p class="text-muted">Manage your account and Voice AI configuration</p>
     </div>
 </div>
 
 <div class="row">
-    <!-- API Key Management -->
+    <!-- Voice AI Configuration -->
     <div class="col-md-6">
         <div class="card">
             <div class="card-header">
                 <h5 class="mb-0">
-                    <i class="fas fa-key me-2"></i>ElevenLabs API Key
+                    <i class="fas fa-key me-2"></i>Voice AI Configuration
                 </h5>
             </div>
             <div class="card-body">
                 <div class="mb-3">
                     <div class="d-flex justify-content-between align-items-center">
-                        <span>Status:</span>
+                        <span>API Status:</span>
                         <span class="badge {{ 'bg-success' if '✅' in api_key_status else 'bg-danger' if '❌' in api_key_status else 'bg-secondary' }}">
-                            {{ api_key_status }}
+                            {{ api_key_status.replace('✅', 'Connected').replace('❌', 'Disconnected') }}
                         </span>
                     </div>
                 </div>
                 
                 <form method="post" action="/settings/api-key" id="apiKeyForm">
                     <div class="mb-3">
-                        <label for="api_key" class="form-label">API Key</label>
+                        <label for="api_key" class="form-label">Voice AI API Key</label>
                         <input 
                             type="password" 
                             class="form-control" 
                             id="api_key" 
                             name="api_key" 
-                            placeholder="{{ 'Enter your ElevenLabs API key' if not has_api_key else '••••••••••••••••••••••••••••••••' }}"
+                            placeholder="{{ 'Enter your Voice AI API key' if not has_api_key else '••••••••••••••••••••••••••••••••' }}"
                             required
                         >
                         <div class="form-text">
-                            Get your API key from <a href="https://elevenlabs.io/docs/api-reference/authentication" target="_blank">ElevenLabs Dashboard</a>
+                            Get your API key from your Voice AI provider dashboard
                         </div>
                     </div>
                     
@@ -59,6 +62,13 @@
                         </button>
                     </div>
                 </form>
+                
+                {% if not has_api_key %}
+                <div class="alert alert-info mt-3">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <strong>Need an API key?</strong> Contact our support team for Voice AI access credentials.
+                </div>
+                {% endif %}
             </div>
         </div>
         
@@ -173,41 +183,6 @@
         </div>
     </div>
 </div>
-
-<!-- API Key Instructions Modal -->
-<div class="modal fade" id="apiKeyHelpModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">
-                    <i class="fas fa-question-circle me-2"></i>How to Get ElevenLabs API Key
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <ol>
-                    <li>Visit <a href="https://elevenlabs.io" target="_blank">ElevenLabs.io</a></li>
-                    <li>Sign up or log in to your account</li>
-                    <li>Go to your <strong>Profile Settings</strong></li>
-                    <li>Navigate to the <strong>API Keys</strong> section</li>
-                    <li>Create a new API key or copy existing one</li>
-                    <li>Paste it in the field above</li>
-                </ol>
-                
-                <div class="alert alert-info mt-3">
-                    <i class="fas fa-info-circle me-2"></i>
-                    <strong>Note:</strong> Keep your API key secure and never share it publicly. You need credits in your ElevenLabs account to make calls.
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <a href="https://elevenlabs.io" class="btn btn-primary" target="_blank">
-                    <i class="fas fa-external-link-alt me-2"></i>Open ElevenLabs
-                </a>
-            </div>
-        </div>
-    </div>
-</div>
 {% endblock %}
 
 {% block scripts %}
@@ -285,7 +260,7 @@ async function loadUsageStats() {
                 <div class="col-6">
                     <div class="border-end">
                         <h4 class="text-primary mb-0">${stats.total_agents}</h4>
-                        <small class="text-muted">Agents Created</small>
+                        <small class="text-muted">Voice Agents</small>
                     </div>
                 </div>
                 <div class="col-6">
@@ -319,7 +294,7 @@ async function loadUsageStats() {
 
 // Remove API key
 function removeApiKey() {
-    if (confirm('Are you sure you want to remove your API key? This will disable all agent functionality.')) {
+    if (confirm('Are you sure you want to remove your Voice AI API key? This will disable all agent functionality.')) {
         fetch('/settings/api-key', {
             method: 'DELETE',
             headers: {
