@@ -1,0 +1,635 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h3 mb-1">Call History</h1>
+        <p class="text-muted">View and manage all your conversation records</p>
+    </div>
+    <div>
+        <button class="btn btn-outline-success" onclick="exportConversations()">
+            <i class="fas fa-download me-2"></i>Export
+        </button>
+        <button class="btn btn-outline-secondary" onclick="loadStats()">
+            <i class="fas fa-chart-bar me-2"></i>Statistics
+        </button>
+    </div>
+</div>
+
+<!-- Summary Statistics -->
+<div class="row mb-4">
+    <div class="col-md-3 col-sm-6 mb-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h4 class="text-primary">{{ stats.total_calls }}</h4>
+                <small class="text-muted">Total Calls</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6 mb-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h4 class="text-success">{{ stats.successful_calls }}</h4>
+                <small class="text-muted">Successful</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6 mb-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h4 class="text-danger">{{ stats.failed_calls }}</h4>
+                <small class="text-muted">Failed</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6 mb-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h4 class="text-info">{{ "%.0f"|format(stats.avg_duration) }}s</h4>
+                <small class="text-muted">Avg Duration</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-4">
+    <div class="card-header">
+        <div class="row align-items-center">
+            <div class="col">
+                <h5 class="mb-0">
+                    <i class="fas fa-filter me-2"></i>Filters & Search
+                </h5>
+            </div>
+            <div class="col-auto">
+                {% if filters.search or filters.status_filter or filters.campaign_filter %}
+                    <a href="/history" class="btn btn-sm btn-outline-secondary">
+                        <i class="fas fa-times me-1"></i>Clear Filters
+                    </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="card-body">
+        <form method="get" action="/history" class="row g-3">
+            <div class="col-md-4">
+                <label for="search" class="form-label">Search</label>
+                <input 
+                    type="text" 
+                    class="form-control" 
+                    id="search" 
+                    name="search" 
+                    value="{{ filters.search }}"
+                    placeholder="Phone number, name, or transcript..."
+                >
+            </div>
+            
+            <div class="col-md-3">
+                <label for="status_filter" class="form-label">Status</label>
+                <select class="form-select" id="status_filter" name="status_filter">
+                    <option value="">All Statuses</option>
+                    <option value="completed" {{ 'selected' if filters.status_filter == 'completed' }}>Completed</option>
+                    <option value="failed" {{ 'selected' if filters.status_filter == 'failed' }}>Failed</option>
+                    <option value="in_progress" {{ 'selected' if filters.status_filter == 'in_progress' }}>In Progress</option>
+                    <option value="pending" {{ 'selected' if filters.status_filter == 'pending' }}>Pending</option>
+                </select>
+            </div>
+            
+            <div class="col-md-3">
+                <label for="campaign_filter" class="form-label">Campaign</label>
+                <select class="form-select" id="campaign_filter" name="campaign_filter">
+                    <option value="">All Campaigns</option>
+                    {% for campaign in campaigns %}
+                        <option value="{{ campaign.id }}" {{ 'selected' if filters.campaign_filter == campaign.id|string }}>
+                            {{ campaign.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="col-md-2 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="fas fa-search me-2"></i>Filter
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Conversations Table -->
+{% if conversations %}
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                Conversations 
+                <span class="badge bg-secondary">{{ pagination.total_items }}</span>
+            </h5>
+            <small class="text-muted">
+                Showing {{ ((pagination.page - 1) * 20) + 1 }} - {{ ((pagination.page - 1) * 20) + conversations|length }} 
+                of {{ pagination.total_items }}
+            </small>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Contact</th>
+                        <th>Agent</th>
+                        <th>Campaign</th>
+                        <th>Status</th>
+                        <th>Duration</th>
+                        <th>Date</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for conversation in conversations %}
+                    <tr>
+                        <td>
+                            <div>
+                                <strong>{{ conversation.contact_name or 'Unknown' }}</strong>
+                                <br>
+                                <small class="text-muted">{{ conversation.phone_number }}</small>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge bg-light text-dark">
+                                {{ conversation.agent.name if conversation.agent else 'Unknown' }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if conversation.campaign %}
+                                <small>{{ conversation.campaign.name }}</small>
+                            {% else %}
+                                <small class="text-muted">Direct Call</small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge {{ 
+                                'bg-success' if conversation.status == 'completed' 
+                                else 'bg-warning' if conversation.status == 'in_progress' 
+                                else 'bg-danger' if conversation.status == 'failed' 
+                                else 'bg-secondary' 
+                            }}">
+                                {{ conversation.status|title if conversation.status else 'Unknown' }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if conversation.duration_seconds %}
+                                {{ "%.0f"|format(conversation.duration_seconds) }}s
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <small>{{ conversation.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <button 
+                                    class="btn btn-outline-primary" 
+                                    onclick="viewConversation({{ conversation.id }})"
+                                    title="View Details"
+                                >
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                
+                                {% if conversation.transcript %}
+                                    <button 
+                                        class="btn btn-outline-info" 
+                                        onclick="viewTranscript({{ conversation.id }})"
+                                        title="View Transcript"
+                                    >
+                                        <i class="fas fa-file-alt"></i>
+                                    </button>
+                                {% endif %}
+                                
+                                {% if conversation.elevenlabs_conversation_id %}
+                                    <button 
+                                        class="btn btn-outline-success" 
+                                        onclick="playAudio({{ conversation.id }})"
+                                        title="Play Audio"
+                                    >
+                                        <i class="fas fa-play"></i>
+                                    </button>
+                                {% endif %}
+                                
+                                <button 
+                                    class="btn btn-outline-danger" 
+                                    onclick="deleteConversation({{ conversation.id }})"
+                                    title="Delete"
+                                >
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Pagination -->
+        {% if pagination.total_pages > 1 %}
+            <div class="card-footer">
+                <nav aria-label="Conversations pagination">
+                    <ul class="pagination justify-content-center mb-0">
+                        {% if pagination.has_prev %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ pagination.page - 1 }}{% if filters.search %}&search={{ filters.search }}{% endif %}{% if filters.status_filter %}&status_filter={{ filters.status_filter }}{% endif %}{% if filters.campaign_filter %}&campaign_filter={{ filters.campaign_filter }}{% endif %}">
+                                    Previous
+                                </a>
+                            </li>
+                        {% endif %}
+                        
+                        {% for page_num in range(max(1, pagination.page - 2), min(pagination.total_pages + 1, pagination.page + 3)) %}
+                            <li class="page-item {{ 'active' if page_num == pagination.page }}">
+                                <a class="page-link" href="?page={{ page_num }}{% if filters.search %}&search={{ filters.search }}{% endif %}{% if filters.status_filter %}&status_filter={{ filters.status_filter }}{% endif %}{% if filters.campaign_filter %}&campaign_filter={{ filters.campaign_filter }}{% endif %}">
+                                    {{ page_num }}
+                                </a>
+                            </li>
+                        {% endfor %}
+                        
+                        {% if pagination.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ pagination.page + 1 }}{% if filters.search %}&search={{ filters.search }}{% endif %}{% if filters.status_filter %}&status_filter={{ filters.status_filter }}{% endif %}{% if filters.campaign_filter %}&campaign_filter={{ filters.campaign_filter }}{% endif %}">
+                                    Next
+                                </a>
+                            </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+            </div>
+        {% endif %}
+    </div>
+{% else %}
+    <div class="text-center py-5">
+        <i class="fas fa-history fa-5x text-muted mb-4"></i>
+        <h4 class="text-muted">No Call History</h4>
+        <p class="text-muted mb-4">
+            {% if filters.search or filters.status_filter or filters.campaign_filter %}
+                No conversations match your filters. 
+                <a href="/history">Clear filters</a> to see all conversations.
+            {% else %}
+                You haven't made any calls yet. Start by creating a campaign or testing an agent.
+            {% endif %}
+        </p>
+        {% if not (filters.search or filters.status_filter or filters.campaign_filter) %}
+            <a href="/campaigns" class="btn btn-primary btn-lg">
+                <i class="fas fa-bullhorn me-2"></i>Create Campaign
+            </a>
+        {% endif %}
+    </div>
+{% endif %}
+
+<!-- Conversation Details Modal -->
+<div class="modal fade" id="conversationModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-phone me-2"></i>Conversation Details
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="conversationDetails">
+                <div class="text-center py-4">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Transcript Modal -->
+<div class="modal fade" id="transcriptModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-file-alt me-2"></i>Conversation Transcript
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="transcriptContent">
+                <!-- Transcript content will be loaded here -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-primary" onclick="copyTranscript()">
+                    <i class="fas fa-copy me-2"></i>Copy
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Audio Player Modal -->
+<div class="modal fade" id="audioModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-play me-2"></i>Call Recording
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                <audio id="audioPlayer" controls class="w-100" style="display: none;">
+                    Your browser does not support the audio element.
+                </audio>
+                <div id="audioLoading" class="py-4">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading audio...</span>
+                    </div>
+                    <p class="mt-2 text-muted">Loading call recording...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Export Modal -->
+<div class="modal fade" id="exportModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-download me-2"></i>Export Conversations
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="exportForm">
+                    <div class="mb-3">
+                        <label for="export_format" class="form-label">Export Format</label>
+                        <select class="form-select" id="export_format" name="format">
+                            <option value="csv">CSV (Excel Compatible)</option>
+                            <option value="json">JSON</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-check mb-3">
+                        <input type="checkbox" class="form-check-input" id="apply_filters" checked>
+                        <label class="form-check-label" for="apply_filters">
+                            Apply current filters to export
+                        </label>
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Export will include: Contact info, agent details, status, duration, transcript, and timestamps.
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="performExport()">
+                    <i class="fas fa-download me-2"></i>Download
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentConversationId = null;
+
+async function viewConversation(conversationId) {
+    currentConversationId = conversationId;
+    const modal = new bootstrap.Modal(document.getElementById('conversationModal'));
+    const detailsDiv = document.getElementById('conversationDetails');
+    
+    // Show loading
+    detailsDiv.innerHTML = `
+        <div class="text-center py-4">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    `;
+    
+    modal.show();
+    
+    try {
+        const response = await fetch(`/history/${conversationId}`);
+        const data = await response.json();
+        const conv = data.conversation;
+        
+        detailsDiv.innerHTML = `
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Contact Information</h6>
+                    <p><strong>Name:</strong> ${conv.contact_name || 'Unknown'}</p>
+                    <p><strong>Phone:</strong> ${conv.phone_number}</p>
+                    <p><strong>Status:</strong> 
+                        <span class="badge bg-${conv.status === 'completed' ? 'success' : conv.status === 'failed' ? 'danger' : 'warning'}">
+                            ${conv.status}
+                        </span>
+                    </p>
+                </div>
+                <div class="col-md-6">
+                    <h6>Call Details</h6>
+                    <p><strong>Agent:</strong> ${conv.agent_name}</p>
+                    <p><strong>Campaign:</strong> ${conv.campaign_name}</p>
+                    <p><strong>Duration:</strong> ${conv.duration_seconds || 0} seconds</p>
+                    <p><strong>Date:</strong> ${new Date(conv.created_at).toLocaleString()}</p>
+                </div>
+            </div>
+            
+            ${conv.transcript ? `
+                <hr>
+                <h6>Transcript Preview</h6>
+                <div class="border rounded p-3 bg-light" style="max-height: 200px; overflow-y: auto;">
+                    <small>${conv.transcript.substring(0, 500)}${conv.transcript.length > 500 ? '...' : ''}</small>
+                </div>
+                <button class="btn btn-outline-primary btn-sm mt-2" onclick="viewFullTranscript()">
+                    <i class="fas fa-expand-alt me-1"></i>View Full Transcript
+                </button>
+            ` : '<p class="text-muted">No transcript available</p>'}
+        `;
+        
+    } catch (error) {
+        detailsDiv.innerHTML = `
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                Error loading conversation details
+            </div>
+        `;
+    }
+}
+
+async function viewTranscript(conversationId) {
+    try {
+        const response = await fetch(`/history/${conversationId}`);
+        const data = await response.json();
+        const conv = data.conversation;
+        
+        const modal = new bootstrap.Modal(document.getElementById('transcriptModal'));
+        const contentDiv = document.getElementById('transcriptContent');
+        
+        if (conv.transcript) {
+            contentDiv.innerHTML = `
+                <div class="transcript-content p-3 border rounded" style="max-height: 400px; overflow-y: auto;">
+                    <pre style="white-space: pre-wrap; font-family: inherit;">${conv.transcript}</pre>
+                </div>
+            `;
+        } else {
+            contentDiv.innerHTML = `
+                <div class="text-center text-muted py-4">
+                    <i class="fas fa-file-alt fa-3x mb-3"></i>
+                    <p>No transcript available for this conversation</p>
+                </div>
+            `;
+        }
+        
+        modal.show();
+    } catch (error) {
+        alert('Error loading transcript');
+    }
+}
+
+async function playAudio(conversationId) {
+    const modal = new bootstrap.Modal(document.getElementById('audioModal'));
+    const audioPlayer = document.getElementById('audioPlayer');
+    const audioLoading = document.getElementById('audioLoading');
+    
+    audioPlayer.style.display = 'none';
+    audioLoading.style.display = 'block';
+    
+    modal.show();
+    
+    try {
+        const response = await fetch(`/history/${conversationId}/audio`);
+        const audioData = await response.json();
+        
+        if (audioData.audio_url) {
+            audioPlayer.src = audioData.audio_url;
+            audioPlayer.style.display = 'block';
+            audioLoading.style.display = 'none';
+        } else {
+            audioLoading.innerHTML = `
+                <div class="text-muted">
+                    <i class="fas fa-exclamation-circle fa-2x mb-3"></i>
+                    <p>Audio not available for this conversation</p>
+                </div>
+            `;
+        }
+    } catch (error) {
+        audioLoading.innerHTML = `
+            <div class="text-danger">
+                <i class="fas fa-exclamation-triangle fa-2x mb-3"></i>
+                <p>Error loading audio</p>
+            </div>
+        `;
+    }
+}
+
+function deleteConversation(conversationId) {
+    if (confirm('Are you sure you want to delete this conversation? This action cannot be undone.')) {
+        fetch(`/history/${conversationId}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.message) {
+                location.reload();
+            } else {
+                alert('Error deleting conversation');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error deleting conversation');
+        });
+    }
+}
+
+function exportConversations() {
+    const modal = new bootstrap.Modal(document.getElementById('exportModal'));
+    modal.show();
+}
+
+function performExport() {
+    const format = document.getElementById('export_format').value;
+    const applyFilters = document.getElementById('apply_filters').checked;
+    
+    let exportUrl = `/history/export?format=${format}`;
+    
+    if (applyFilters) {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('search')) exportUrl += `&search=${urlParams.get('search')}`;
+        if (urlParams.get('status_filter')) exportUrl += `&status_filter=${urlParams.get('status_filter')}`;
+        if (urlParams.get('campaign_filter')) exportUrl += `&campaign_filter=${urlParams.get('campaign_filter')}`;
+    }
+    
+    // Create temporary link and click it to download
+    const link = document.createElement('a');
+    link.href = exportUrl;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    bootstrap.Modal.getInstance(document.getElementById('exportModal')).hide();
+}
+
+function copyTranscript() {
+    const transcriptText = document.querySelector('#transcriptContent .transcript-content pre');
+    if (transcriptText) {
+        navigator.clipboard.writeText(transcriptText.textContent).then(() => {
+            // Show temporary success message
+            const button = event.target;
+            const originalText = button.innerHTML;
+            button.innerHTML = '<i class="fas fa-check me-2"></i>Copied!';
+            button.classList.remove('btn-outline-primary');
+            button.classList.add('btn-success');
+            
+            setTimeout(() => {
+                button.innerHTML = originalText;
+                button.classList.remove('btn-success');
+                button.classList.add('btn-outline-primary');
+            }, 2000);
+        }).catch(() => {
+            alert('Failed to copy transcript to clipboard');
+        });
+    }
+}
+
+function viewFullTranscript() {
+    bootstrap.Modal.getInstance(document.getElementById('conversationModal')).hide();
+    viewTranscript(currentConversationId);
+}
+
+async function loadStats() {
+    try {
+        const response = await fetch('/history/stats/summary');
+        const stats = await response.json();
+        
+        // Create a simple stats modal or update existing elements
+        alert(`Detailed Statistics:\n\nTotal Conversations: ${stats.total_conversations}\nAverage Duration: ${stats.average_duration}s\n\nStatus Breakdown:\n${stats.status_breakdown.map(s => `${s.status}: ${s.count}`).join('\n')}`);
+        
+    } catch (error) {
+        alert('Error loading statistics');
+    }
+}
+
+// Auto-refresh status for in-progress calls (optional)
+setInterval(async () => {
+    const inProgressRows = document.querySelectorAll('tbody tr');
+    for (const row of inProgressRows) {
+        const statusBadge = row.querySelector('.badge');
+        if (statusBadge && statusBadge.textContent.toLowerCase().includes('progress')) {
+            // Could implement real-time updates here
+        }
+    }
+}, 30000); // Check every 30 seconds
+</script>
+{% endblock %}

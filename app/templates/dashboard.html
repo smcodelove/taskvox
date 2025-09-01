@@ -1,0 +1,341 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h3 mb-1">Dashboard</h1>
+        <p class="text-muted">Welcome back! Here's what's happening with your AI agents.</p>
+    </div>
+    <div>
+        <button class="btn btn-outline-secondary" onclick="location.reload()">
+            <i class="fas fa-sync-alt me-2"></i>Refresh
+        </button>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="row mb-4">
+    <div class="col-md-3 col-sm-6 mb-3">
+        <div class="card stats-card bg-primary text-white">
+            <div class="card-body">
+                <span class="stats-number">{{ stats.total_agents if stats else 0 }}</span>
+                <span class="stats-label">Active Agents</span>
+                <i class="fas fa-robot position-absolute" style="top: 1rem; right: 1rem; opacity: 0.3; font-size: 2rem;"></i>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 col-sm-6 mb-3">
+        <div class="card stats-card bg-success text-white">
+            <div class="card-body">
+                <span class="stats-number">{{ stats.total_campaigns if stats else 0 }}</span>
+                <span class="stats-label">Total Campaigns</span>
+                <i class="fas fa-bullhorn position-absolute" style="top: 1rem; right: 1rem; opacity: 0.3; font-size: 2rem;"></i>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 col-sm-6 mb-3">
+        <div class="card stats-card bg-info text-white">
+            <div class="card-body">
+                <span class="stats-number">{{ stats.total_conversations if stats else 0 }}</span>
+                <span class="stats-label">Total Calls</span>
+                <i class="fas fa-phone position-absolute" style="top: 1rem; right: 1rem; opacity: 0.3; font-size: 2rem;"></i>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 col-sm-6 mb-3">
+        <div class="card stats-card bg-warning text-white">
+            <div class="card-body">
+                <span class="stats-number">{{ "%.1f"|format(stats.success_rate) if stats else 0 }}%</span>
+                <span class="stats-label">Success Rate</span>
+                <i class="fas fa-chart-line position-absolute" style="top: 1rem; right: 1rem; opacity: 0.3; font-size: 2rem;"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row -->
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-chart-area me-2"></i>Call Success Rate (Last 30 Days)
+                </h5>
+            </div>
+            <div class="card-body">
+                <canvas id="successRateChart" height="100"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-chart-pie me-2"></i>Campaign Status
+                </h5>
+            </div>
+            <div class="card-body">
+                <canvas id="campaignStatusChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Activity -->
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-history me-2"></i>Recent Calls
+                </h5>
+                <a href="/history" class="btn btn-sm btn-outline-primary">View All</a>
+            </div>
+            <div class="card-body p-0">
+                {% if recent_conversations %}
+                    <div class="list-group list-group-flush">
+                        {% for conversation in recent_conversations %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1">
+                                    {% if conversation.contact_name %}
+                                        {{ conversation.contact_name }}
+                                    {% else %}
+                                        {{ conversation.phone_number }}
+                                    {% endif %}
+                                </h6>
+                                <p class="mb-1 small text-muted">
+                                    <i class="fas fa-clock me-1"></i>
+                                    {{ conversation.created_at.strftime('%Y-%m-%d %H:%M') }}
+                                </p>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge bg-{{ 'success' if conversation.status == 'completed' else 'warning' if conversation.status == 'in_progress' else 'danger' }}">
+                                    {{ conversation.status|title }}
+                                </span>
+                                {% if conversation.duration_seconds %}
+                                    <small class="d-block text-muted">{{ conversation.duration_seconds }}s</small>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center p-4">
+                        <i class="fas fa-phone-slash fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">No recent calls</p>
+                        <a href="/campaigns" class="btn btn-primary">Create Campaign</a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-bullhorn me-2"></i>Recent Campaigns
+                </h5>
+                <a href="/campaigns" class="btn btn-sm btn-outline-primary">View All</a>
+            </div>
+            <div class="card-body p-0">
+                {% if recent_campaigns %}
+                    <div class="list-group list-group-flush">
+                        {% for campaign in recent_campaigns %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1">{{ campaign.name }}</h6>
+                                <p class="mb-1 small text-muted">
+                                    <i class="fas fa-calendar me-1"></i>
+                                    {{ campaign.created_at.strftime('%Y-%m-%d %H:%M') }}
+                                </p>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge status-{{ campaign.status }}">
+                                    {{ campaign.status|title }}
+                                </span>
+                                <small class="d-block text-muted">
+                                    {{ campaign.completed_calls }}/{{ campaign.total_contacts }} calls
+                                </small>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center p-4">
+                        <i class="fas fa-bullhorn fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">No campaigns yet</p>
+                        <a href="/campaigns" class="btn btn-primary">Create Campaign</a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-bolt me-2"></i>Quick Actions
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3 col-sm-6 mb-3">
+                        <a href="/agents" class="btn btn-outline-primary w-100">
+                            <i class="fas fa-robot fa-2x d-block mb-2"></i>
+                            Create Agent
+                        </a>
+                    </div>
+                    <div class="col-md-3 col-sm-6 mb-3">
+                        <a href="/campaigns" class="btn btn-outline-success w-100">
+                            <i class="fas fa-bullhorn fa-2x d-block mb-2"></i>
+                            New Campaign
+                        </a>
+                    </div>
+                    <div class="col-md-3 col-sm-6 mb-3">
+                        <a href="/history" class="btn btn-outline-info w-100">
+                            <i class="fas fa-history fa-2x d-block mb-2"></i>
+                            View History
+                        </a>
+                    </div>
+                    <div class="col-md-3 col-sm-6 mb-3">
+                        <a href="/settings" class="btn btn-outline-warning w-100">
+                            <i class="fas fa-cog fa-2x d-block mb-2"></i>
+                            Settings
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Load chart data and render charts
+    document.addEventListener('DOMContentLoaded', function() {
+        loadChartData();
+    });
+    
+    async function loadChartData() {
+        try {
+            const response = await fetch('/api/dashboard/charts');
+            const data = await response.json();
+            
+            renderSuccessRateChart(data.daily_stats);
+            renderCampaignStatusChart(data.campaign_status);
+        } catch (error) {
+            console.error('Error loading chart data:', error);
+        }
+    }
+    
+    function renderSuccessRateChart(dailyStats) {
+        const ctx = document.getElementById('successRateChart').getContext('2d');
+        
+        const labels = dailyStats.map(stat => stat.date);
+        const successRates = dailyStats.map(stat => stat.success_rate);
+        const totalCalls = dailyStats.map(stat => stat.total_calls);
+        
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Success Rate (%)',
+                    data: successRates,
+                    borderColor: '#2563eb',
+                    backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                }, {
+                    label: 'Total Calls',
+                    data: totalCalls,
+                    borderColor: '#059669',
+                    backgroundColor: 'rgba(5, 150, 105, 0.1)',
+                    tension: 0.4,
+                    yAxisID: 'y1'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        title: {
+                            display: true,
+                            text: 'Success Rate (%)'
+                        }
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        title: {
+                            display: true,
+                            text: 'Total Calls'
+                        },
+                        grid: {
+                            drawOnChartArea: false,
+                        },
+                    }
+                }
+            }
+        });
+    }
+    
+    function renderCampaignStatusChart(campaignStatus) {
+        const ctx = document.getElementById('campaignStatusChart').getContext('2d');
+        
+        const labels = campaignStatus.map(status => status.status.charAt(0).toUpperCase() + status.status.slice(1));
+        const data = campaignStatus.map(status => status.count);
+        
+        const colors = {
+            'Pending': '#fbbf24',
+            'Running': '#2563eb',
+            'Completed': '#059669',
+            'Failed': '#dc2626',
+            'Paused': '#64748b'
+        };
+        
+        const backgroundColors = labels.map(label => colors[label] || '#64748b');
+        
+        new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: data,
+                    backgroundColor: backgroundColors,
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                    }
+                }
+            }
+        });
+    }
+</script>
+{% endblock %}

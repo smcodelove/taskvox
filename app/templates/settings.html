@@ -1,0 +1,356 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h3 mb-1">Settings</h1>
+        <p class="text-muted">Manage your account and API configuration</p>
+    </div>
+</div>
+
+<div class="row">
+    <!-- API Key Management -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-key me-2"></i>ElevenLabs API Key
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span>Status:</span>
+                        <span class="badge {{ 'bg-success' if '✅' in api_key_status else 'bg-danger' if '❌' in api_key_status else 'bg-secondary' }}">
+                            {{ api_key_status }}
+                        </span>
+                    </div>
+                </div>
+                
+                <form method="post" action="/settings/api-key" id="apiKeyForm">
+                    <div class="mb-3">
+                        <label for="api_key" class="form-label">API Key</label>
+                        <input 
+                            type="password" 
+                            class="form-control" 
+                            id="api_key" 
+                            name="api_key" 
+                            placeholder="{{ 'Enter your ElevenLabs API key' if not has_api_key else '••••••••••••••••••••••••••••••••' }}"
+                            required
+                        >
+                        <div class="form-text">
+                            Get your API key from <a href="https://elevenlabs.io/docs/api-reference/authentication" target="_blank">ElevenLabs Dashboard</a>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-2"></i>{{ 'Update' if has_api_key else 'Save' }} API Key
+                        </button>
+                        
+                        {% if has_api_key %}
+                            <button type="button" class="btn btn-outline-danger" onclick="removeApiKey()">
+                                <i class="fas fa-trash me-2"></i>Remove
+                            </button>
+                        {% endif %}
+                        
+                        <button type="button" class="btn btn-outline-secondary" id="toggleApiKey">
+                            <i class="fas fa-eye me-2"></i>Show/Hide
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Usage Statistics -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-chart-bar me-2"></i>Usage Statistics
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="usageStats">
+                    <div class="text-center py-3">
+                        <div class="spinner-border spinner-border-sm" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Profile Management -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-user me-2"></i>Profile Settings
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="post" action="/settings/profile" id="profileForm">
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email Address</label>
+                        <input 
+                            type="email" 
+                            class="form-control" 
+                            id="email" 
+                            name="email" 
+                            value="{{ user.email }}"
+                            required
+                        >
+                    </div>
+                    
+                    <hr>
+                    
+                    <h6 class="mb-3">Change Password</h6>
+                    <p class="text-muted small">Leave blank to keep current password</p>
+                    
+                    <div class="mb-3">
+                        <label for="current_password" class="form-label">Current Password</label>
+                        <input 
+                            type="password" 
+                            class="form-control" 
+                            id="current_password" 
+                            name="current_password"
+                            placeholder="Enter current password"
+                        >
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="new_password" class="form-label">New Password</label>
+                        <input 
+                            type="password" 
+                            class="form-control" 
+                            id="new_password" 
+                            name="new_password"
+                            placeholder="Enter new password"
+                            minlength="6"
+                        >
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="confirm_password" class="form-label">Confirm New Password</label>
+                        <input 
+                            type="password" 
+                            class="form-control" 
+                            id="confirm_password" 
+                            name="confirm_password"
+                            placeholder="Confirm new password"
+                        >
+                        <div class="invalid-feedback" id="passwordMismatch" style="display: none;">
+                            Passwords do not match
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-2"></i>Update Profile
+                    </button>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Account Actions -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0 text-danger">
+                    <i class="fas fa-exclamation-triangle me-2"></i>Danger Zone
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">Irreversible and destructive actions</p>
+                
+                <button type="button" class="btn btn-outline-danger" onclick="confirmAccountDeletion()">
+                    <i class="fas fa-user-times me-2"></i>Delete Account
+                </button>
+                
+                <div class="form-text mt-2">
+                    This will permanently delete your account and all associated data including agents, campaigns, and call history.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- API Key Instructions Modal -->
+<div class="modal fade" id="apiKeyHelpModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-question-circle me-2"></i>How to Get ElevenLabs API Key
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <ol>
+                    <li>Visit <a href="https://elevenlabs.io" target="_blank">ElevenLabs.io</a></li>
+                    <li>Sign up or log in to your account</li>
+                    <li>Go to your <strong>Profile Settings</strong></li>
+                    <li>Navigate to the <strong>API Keys</strong> section</li>
+                    <li>Create a new API key or copy existing one</li>
+                    <li>Paste it in the field above</li>
+                </ol>
+                
+                <div class="alert alert-info mt-3">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <strong>Note:</strong> Keep your API key secure and never share it publicly. You need credits in your ElevenLabs account to make calls.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <a href="https://elevenlabs.io" class="btn btn-primary" target="_blank">
+                    <i class="fas fa-external-link-alt me-2"></i>Open ElevenLabs
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Toggle API key visibility
+document.getElementById('toggleApiKey').addEventListener('click', function() {
+    const apiKeyInput = document.getElementById('api_key');
+    const icon = this.querySelector('i');
+    
+    if (apiKeyInput.type === 'password') {
+        apiKeyInput.type = 'text';
+        icon.className = 'fas fa-eye-slash me-2';
+    } else {
+        apiKeyInput.type = 'password';
+        icon.className = 'fas fa-eye me-2';
+    }
+});
+
+// Password validation
+document.getElementById('profileForm').addEventListener('submit', function(e) {
+    const newPassword = document.getElementById('new_password').value;
+    const confirmPassword = document.getElementById('confirm_password').value;
+    const currentPassword = document.getElementById('current_password').value;
+    const passwordMismatch = document.getElementById('passwordMismatch');
+    
+    // Check if password change is attempted
+    if (newPassword || confirmPassword) {
+        if (!currentPassword) {
+            e.preventDefault();
+            alert('Current password is required to change password');
+            return;
+        }
+        
+        if (newPassword !== confirmPassword) {
+            e.preventDefault();
+            document.getElementById('confirm_password').classList.add('is-invalid');
+            passwordMismatch.style.display = 'block';
+            return;
+        }
+        
+        if (newPassword.length < 6) {
+            e.preventDefault();
+            alert('New password must be at least 6 characters long');
+            return;
+        }
+    }
+    
+    document.getElementById('confirm_password').classList.remove('is-invalid');
+    passwordMismatch.style.display = 'none';
+});
+
+// Real-time password validation
+document.getElementById('confirm_password').addEventListener('input', function() {
+    const newPassword = document.getElementById('new_password').value;
+    const confirmPassword = this.value;
+    const passwordMismatch = document.getElementById('passwordMismatch');
+    
+    if (newPassword !== confirmPassword && confirmPassword.length > 0) {
+        this.classList.add('is-invalid');
+        passwordMismatch.style.display = 'block';
+    } else {
+        this.classList.remove('is-invalid');
+        passwordMismatch.style.display = 'none';
+    }
+});
+
+// Load usage statistics
+async function loadUsageStats() {
+    try {
+        const response = await fetch('/settings/usage-stats');
+        const stats = await response.json();
+        
+        document.getElementById('usageStats').innerHTML = `
+            <div class="row text-center">
+                <div class="col-6">
+                    <div class="border-end">
+                        <h4 class="text-primary mb-0">${stats.total_agents}</h4>
+                        <small class="text-muted">Agents Created</small>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <h4 class="text-success mb-0">${stats.total_campaigns}</h4>
+                    <small class="text-muted">Campaigns</small>
+                </div>
+            </div>
+            <hr>
+            <div class="row text-center">
+                <div class="col-6">
+                    <div class="border-end">
+                        <h4 class="text-info mb-0">${stats.total_calls}</h4>
+                        <small class="text-muted">Total Calls</small>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <h4 class="text-warning mb-0">${stats.success_rate.toFixed(1)}%</h4>
+                    <small class="text-muted">Success Rate</small>
+                </div>
+            </div>
+        `;
+    } catch (error) {
+        document.getElementById('usageStats').innerHTML = `
+            <div class="text-center text-muted">
+                <i class="fas fa-exclamation-triangle"></i>
+                <p class="mb-0">Unable to load statistics</p>
+            </div>
+        `;
+    }
+}
+
+// Remove API key
+function removeApiKey() {
+    if (confirm('Are you sure you want to remove your API key? This will disable all agent functionality.')) {
+        fetch('/settings/api-key', {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.message) {
+                location.reload();
+            } else {
+                alert('Error removing API key');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error removing API key');
+        });
+    }
+}
+
+// Account deletion
+function confirmAccountDeletion() {
+    const confirmation = prompt('Type "DELETE" to confirm account deletion:');
+    if (confirmation === 'DELETE') {
+        alert('Account deletion feature will be implemented in the next version.');
+        // TODO: Implement account deletion
+    }
+}
+
+// Load usage stats on page load
+document.addEventListener('DOMContentLoaded', loadUsageStats);
+</script>
+{% endblock %}
