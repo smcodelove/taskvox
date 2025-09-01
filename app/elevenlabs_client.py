@@ -55,26 +55,33 @@ class ElevenLabsClient:
             logger.error(f"Failed to get voices: {e}")
             return {"success": False, "error": str(e)}
     
+    # FILE PATH: app/elevenlabs_client.py
+    # REPLACE THE create_agent METHOD IN YOUR EXISTING CLIENT WITH THIS
+
     async def create_agent(self, config: Dict) -> Dict:
-        """Create new conversational agent with latest API"""
+        """Create new conversational agent with detailed debugging"""
         try:
+            print(f"🔍 Creating agent with config: {config}")
+            
+            # Updated agent config based on latest ElevenLabs API
             agent_config = {
                 "name": config.get("name", "TasKvox Agent"),
                 "voice_id": config.get("voice_id"),
                 "conversation_config": {
                     "agent": {
                         "prompt": {
-                            "prompt": config.get("system_prompt", "You are a helpful AI assistant.")
+                            "prompt": config.get("system_prompt", "You are a helpful AI assistant."),
+                            # Using new tool_ids format instead of deprecated tools
+                            "tool_ids": [],  # Empty for basic agents
+                            "built_in_tools": ["end_call"]  # System tools
                         },
-                        "language": config.get("language", "en")
+                        "language": config.get("language", "en"),
+                        "max_duration_seconds": config.get("max_duration", 300)
                     }
-                },
-                "widget_config": {
-                    "layout": "floating_button",
-                    "avatar_url": config.get("avatar_url"),
-                    "greeting_message": config.get("greeting", "Hello! How can I help you today?")
                 }
             }
+            
+            print(f"📡 Sending agent config: {agent_config}")
             
             async with httpx.AsyncClient() as client:
                 response = await client.post(
@@ -84,15 +91,47 @@ class ElevenLabsClient:
                     timeout=30.0
                 )
                 
+                print(f"📋 Response Status: {response.status_code}")
+                print(f"📋 Response Headers: {dict(response.headers)}")
+                
+                response_text = response.text
+                print(f"📋 Response Text: {response_text}")
+                
                 if response.status_code == 201:
-                    return {"success": True, "agent": response.json()}
+                    try:
+                        response_data = response.json()
+                        print(f"✅ Success! Response data: {response_data}")
+                        return {"success": True, "agent": response_data}
+                    except Exception as json_error:
+                        print(f"❌ JSON parsing error: {json_error}")
+                        return {
+                            "success": False, 
+                            "error": f"Invalid JSON response: {response_text[:500]}"
+                        }
                 else:
-                    error_msg = response.text
-                    logger.error(f"Failed to create agent: {error_msg}")
-                    return {"success": False, "error": error_msg}
+                    print(f"❌ HTTP Error {response.status_code}")
+                    try:
+                        error_data = response.json()
+                        error_msg = error_data.get("message", error_data.get("error", response_text))
+                    except:
+                        error_msg = response_text
+                    
+                    return {
+                        "success": False, 
+                        "error": f"HTTP {response.status_code}: {error_msg}"
+                    }
+                    
+        except httpx.TimeoutException:
+            print("❌ Timeout error")
+            return {"success": False, "error": "Request timeout"}
+        except httpx.RequestError as e:
+            print(f"❌ Request error: {e}")
+            return {"success": False, "error": f"Network error: {str(e)}"}
         except Exception as e:
-            logger.error(f"Failed to create agent: {e}")
-            return {"success": False, "error": str(e)}
+            print(f"❌ Unexpected error: {e}")
+            import traceback
+            traceback.print_exc()
+            return {"success": False, "error": f"Unexpected error: {str(e)}"}
     
     async def list_agents(self) -> Dict:
         """List all user agents"""

@@ -1,7 +1,9 @@
+# FILE PATH: app/routers/agents.py
+# REPLACE YOUR EXISTING app/routers/agents.py WITH THIS
+
 """
-TasKvox AI - Enhanced Agents Router
-Fetch existing ElevenLabs agents and sync with database
-Replace your app/routers/agents.py with this
+TasKvox AI - Agents Router with Working ElevenLabs Sync
+Path: app/routers/agents.py
 """
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Request, Form
@@ -22,7 +24,7 @@ async def agents_page(
     current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    """Agents management page with ElevenLabs sync"""
+    """Agents management page"""
     
     # Get local agents from database
     local_agents = db.query(models.Agent)\
@@ -41,7 +43,7 @@ async def agents_page(
         if voices_result["success"]:
             voices = voices_result["voices"]
         
-        # Get existing ElevenLabs agents
+        # Get existing ElevenLabs agents for sync button
         agents_result = await client.list_agents()
         if agents_result["success"]:
             elevenlabs_agents = agents_result.get("agents", [])
@@ -54,7 +56,7 @@ async def agents_page(
             "user": current_user,
             "agents": local_agents,
             "voices": voices,
-            "elevenlabs_agents": elevenlabs_agents  # Pass ElevenLabs agents to template
+            "elevenlabs_agents": elevenlabs_agents
         }
     )
 
@@ -68,43 +70,98 @@ async def sync_elevenlabs_agents(
     if not current_user.elevenlabs_api_key:
         raise HTTPException(status_code=400, detail="ElevenLabs API key not configured")
     
-    client = ElevenLabsClient(current_user.elevenlabs_api_key)
-    result = await client.list_agents()
-    
-    if not result["success"]:
-        raise HTTPException(status_code=400, detail=f"Failed to fetch agents: {result['error']}")
-    
-    elevenlabs_agents = result.get("agents", [])
-    synced_count = 0
-    
-    for el_agent in elevenlabs_agents:
-        # Check if agent already exists in our database
-        existing_agent = db.query(models.Agent)\
-            .filter(
-                models.Agent.user_id == current_user.id,
-                models.Agent.elevenlabs_agent_id == el_agent["agent_id"]
-            ).first()
+    try:
+        client = ElevenLabsClient(current_user.elevenlabs_api_key)
+        result = await client.list_agents()
         
-        if not existing_agent:
-            # Create new agent record
-            new_agent = models.Agent(
-                user_id=current_user.id,
-                elevenlabs_agent_id=el_agent["agent_id"],
-                name=el_agent.get("name", "Imported Agent"),
-                voice_id=el_agent.get("voice_id"),
-                system_prompt=el_agent.get("prompt", {}).get("prompt"),
-                is_active=True
-            )
-            db.add(new_agent)
-            synced_count += 1
-    
-    db.commit()
-    
-    return {
-        "message": f"Successfully synced {synced_count} agents from ElevenLabs",
-        "synced_count": synced_count,
-        "total_elevenlabs_agents": len(elevenlabs_agents)
-    }
+        if not result["success"]:
+            raise HTTPException(status_code=400, detail=f"Failed to fetch agents: {result.get('error', 'Unknown error')}")
+        
+        # Get agents list from response
+        agents_data = result.get("agents", [])
+        
+        # Handle different response structures
+        if isinstance(agents_data, dict):
+            agents_data = agents_data.get("agents", [])
+        
+        synced_count = 0
+        
+        # Debug print
+        print(f"ElevenLabs response: {result}")
+        print(f"Agents data type: {type(agents_data)}")
+        print(f"Agents data: {agents_data}")
+        
+        # Handle the response properly
+        if isinstance(agents_data, list):
+            for agent_item in agents_data:
+                try:
+                    # Handle different agent formats
+                    if isinstance(agent_item, dict):
+                        agent_id = agent_item.get("agent_id") or agent_item.get("id")
+                        agent_name = agent_item.get("name", f"Agent {agent_id[:8] if agent_id else 'Unknown'}")
+                        voice_id = agent_item.get("voice_id")
+                        
+                        # Handle nested prompt
+                        system_prompt = None
+                        if "prompt" in agent_item:
+                            prompt_data = agent_item["prompt"]
+                            if isinstance(prompt_data, dict):
+                                system_prompt = prompt_data.get("prompt")
+                            else:
+                                system_prompt = str(prompt_data)
+                        elif "system_prompt" in agent_item:
+                            system_prompt = agent_item["system_prompt"]
+                        
+                    elif isinstance(agent_item, str):
+                        # If it's just an ID string
+                        agent_id = agent_item
+                        agent_name = f"Imported Agent {agent_id[:8]}"
+                        voice_id = None
+                        system_prompt = None
+                    else:
+                        continue
+                    
+                    if not agent_id:
+                        continue
+                    
+                    # Check if already exists
+                    existing = db.query(models.Agent)\
+                        .filter(
+                            models.Agent.user_id == current_user.id,
+                            models.Agent.elevenlabs_agent_id == agent_id
+                        ).first()
+                    
+                    if not existing:
+                        new_agent = models.Agent(
+                            user_id=current_user.id,
+                            elevenlabs_agent_id=agent_id,
+                            name=agent_name,
+                            voice_id=voice_id,
+                            system_prompt=system_prompt,
+                            is_active=True
+                        )
+                        db.add(new_agent)
+                        synced_count += 1
+                        print(f"Added agent: {agent_name} ({agent_id})")
+                        
+                except Exception as e:
+                    print(f"Error processing agent {agent_item}: {e}")
+                    continue
+        
+        db.commit()
+        
+        return {
+            "message": f"Successfully synced {synced_count} agents from ElevenLabs",
+            "synced_count": synced_count,
+            "total_elevenlabs_agents": len(agents_data) if isinstance(agents_data, list) else 0
+        }
+        
+    except Exception as e:
+        print(f"Sync error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error syncing agents: {str(e)}")
+
+# FILE PATH: app/routers/agents.py
+# UPDATE YOUR create_agent_form FUNCTION WITH THIS DEBUG VERSION
 
 @router.post("")
 async def create_agent_form(
@@ -115,62 +172,86 @@ async def create_agent_form(
     current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    """Create agent from form submission"""
+    """Create agent from form submission with detailed debugging"""
     try:
-        agent_data = schemas.AgentCreate(
+        elevenlabs_agent_id = None
+        error_message = None
+        
+        if current_user.elevenlabs_api_key:
+            # Try to create in ElevenLabs with detailed logging
+            client = ElevenLabsClient(current_user.elevenlabs_api_key)
+            
+            print(f"🔍 Creating agent in ElevenLabs...")
+            print(f"   Name: {name}")
+            print(f"   Voice ID: {voice_id}")
+            print(f"   System Prompt: {system_prompt[:100]}...")
+            
+            result = await client.create_agent({
+                "name": name,
+                "voice_id": voice_id,
+                "system_prompt": system_prompt
+            })
+            
+            print(f"📡 ElevenLabs API Response:")
+            print(f"   Success: {result['success']}")
+            print(f"   Full Response: {result}")
+            
+            if result["success"]:
+                # Extract agent ID with multiple fallback options
+                agent_data = result.get("agent", {})
+                print(f"   Agent Data: {agent_data}")
+                
+                if isinstance(agent_data, dict):
+                    elevenlabs_agent_id = (
+                        agent_data.get("agent_id") or 
+                        agent_data.get("id") or 
+                        agent_data.get("agentId")
+                    )
+                elif isinstance(agent_data, str):
+                    elevenlabs_agent_id = agent_data
+                
+                print(f"   Extracted Agent ID: {elevenlabs_agent_id}")
+                
+                if not elevenlabs_agent_id:
+                    print("❌ Could not extract agent ID from response")
+                    error_message = "Agent created but no ID returned from ElevenLabs"
+            else:
+                error_message = result.get('error', 'Unknown ElevenLabs error')
+                print(f"❌ ElevenLabs creation failed: {error_message}")
+        else:
+            print("⚠️  No API key - creating local agent only")
+        
+        # Create in local database regardless
+        db_agent = models.Agent(
+            user_id=current_user.id,
+            elevenlabs_agent_id=elevenlabs_agent_id,
             name=name,
             voice_id=voice_id,
-            system_prompt=system_prompt
+            system_prompt=system_prompt,
+            is_active=True
         )
         
-        await create_agent_internal(agent_data, current_user, db)
-        return RedirectResponse(url="/agents?success=Agent created successfully", status_code=302)
+        db.add(db_agent)
+        db.commit()
+        db.refresh(db_agent)
+        
+        print(f"✅ Local agent created with ID: {db_agent.id}")
+        
+        # Determine success message
+        if elevenlabs_agent_id:
+            status_msg = f"Agent created successfully (ElevenLabs ID: {elevenlabs_agent_id[:12]}...)"
+        elif error_message:
+            status_msg = f"Agent created locally but ElevenLabs failed: {error_message}"
+        else:
+            status_msg = "Agent created (local only - configure API key for ElevenLabs sync)"
+        
+        return RedirectResponse(url=f"/agents?success={status_msg}", status_code=302)
         
     except Exception as e:
-        return RedirectResponse(url=f"/agents?error={str(e)}", status_code=302)
-
-async def create_agent_internal(
-    agent: schemas.AgentCreate,
-    current_user: models.User,
-    db: Session
-) -> models.Agent:
-    """Internal function to create agent"""
-    
-    # Check if user has ElevenLabs API key
-    if not current_user.elevenlabs_api_key:
-        raise HTTPException(
-            status_code=400,
-            detail="Please configure your ElevenLabs API key in settings first"
-        )
-    
-    # Create agent in ElevenLabs
-    client = ElevenLabsClient(current_user.elevenlabs_api_key)
-    result = await client.create_agent({
-        "name": agent.name,
-        "voice_id": agent.voice_id,
-        "system_prompt": agent.system_prompt
-    })
-    
-    if not result["success"]:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Failed to create agent in ElevenLabs: {result.get('error', 'Unknown error')}"
-        )
-    
-    # Create agent in database
-    db_agent = models.Agent(
-        user_id=current_user.id,
-        elevenlabs_agent_id=result["agent"]["agent_id"],
-        name=agent.name,
-        voice_id=agent.voice_id,
-        system_prompt=agent.system_prompt
-    )
-    
-    db.add(db_agent)
-    db.commit()
-    db.refresh(db_agent)
-    
-    return db_agent
+        print(f"💥 Exception during agent creation: {e}")
+        import traceback
+        traceback.print_exc()
+        return RedirectResponse(url=f"/agents?error=Creation failed: {str(e)}", status_code=302)
 
 @router.post("/{agent_id}/test-call")
 async def test_agent_call(
@@ -179,7 +260,7 @@ async def test_agent_call(
     current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    """Test agent with a live phone call"""
+    """Test agent with a phone call"""
     
     agent = db.query(models.Agent)\
         .filter(models.Agent.id == agent_id, models.Agent.user_id == current_user.id)\
@@ -194,37 +275,53 @@ async def test_agent_call(
     if not agent.elevenlabs_agent_id:
         raise HTTPException(status_code=400, detail="Agent not linked to ElevenLabs")
     
-    # Make test call using the updated client
-    client = ElevenLabsClient(current_user.elevenlabs_api_key)
-    result = await client.make_single_call(
-        agent.elevenlabs_agent_id,
-        phone_number
-    )
-    
-    if not result["success"]:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Failed to make test call: {result.get('error', 'Unknown error')}"
+    try:
+        # Make test call
+        client = ElevenLabsClient(current_user.elevenlabs_api_key)
+        result = await client.make_single_call(
+            agent.elevenlabs_agent_id,
+            phone_number
         )
-    
-    # Create conversation record
-    conversation = models.Conversation(
-        user_id=current_user.id,
-        agent_id=agent.id,
-        elevenlabs_conversation_id=result["call"]["conversation_id"],
-        phone_number=phone_number,
-        contact_name="Test Call",
-        status="in_progress"
-    )
-    
-    db.add(conversation)
-    db.commit()
-    
-    return {
-        "message": "Test call initiated successfully!",
-        "conversation_id": conversation.id,
-        "call_status": result["call"]["status"]
-    }
+        
+        # Create conversation record
+        conversation = models.Conversation(
+            user_id=current_user.id,
+            agent_id=agent.id,
+            phone_number=phone_number,
+            contact_name="Test Call",
+            status="in_progress" if result["success"] else "failed"
+        )
+        
+        if result["success"] and "call" in result:
+            conversation.elevenlabs_conversation_id = result["call"].get("conversation_id")
+        
+        db.add(conversation)
+        db.commit()
+        
+        if result["success"]:
+            return {
+                "message": "Test call initiated successfully!",
+                "conversation_id": conversation.id
+            }
+        else:
+            return {
+                "message": f"Test call failed: {result.get('error', 'Unknown error')}",
+                "conversation_id": conversation.id
+            }
+            
+    except Exception as e:
+        # Create failed conversation record
+        conversation = models.Conversation(
+            user_id=current_user.id,
+            agent_id=agent.id,
+            phone_number=phone_number,
+            contact_name="Test Call",
+            status="failed"
+        )
+        db.add(conversation)
+        db.commit()
+        
+        raise HTTPException(status_code=400, detail=f"Test call error: {str(e)}")
 
 @router.delete("/{agent_id}")
 async def delete_agent(
@@ -243,8 +340,11 @@ async def delete_agent(
     
     # Delete from ElevenLabs if exists
     if agent.elevenlabs_agent_id and current_user.elevenlabs_api_key:
-        client = ElevenLabsClient(current_user.elevenlabs_api_key)
-        await client.delete_agent(agent.elevenlabs_agent_id)
+        try:
+            client = ElevenLabsClient(current_user.elevenlabs_api_key)
+            await client.delete_agent(agent.elevenlabs_agent_id)
+        except Exception as e:
+            print(f"Failed to delete from ElevenLabs: {e}")
     
     # Delete from database
     db.delete(agent)
