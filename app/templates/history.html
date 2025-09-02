@@ -3,68 +3,106 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
-        <h1 class="h3 mb-1">Call History</h1>
-        <p class="text-muted">View and manage all your conversation records</p>
+        <h1 class="h3 mb-1">📞 Call History</h1>
+        <p class="text-muted">View and manage all your conversation records with advanced analytics</p>
     </div>
-    <div>
-        <button class="btn btn-outline-success" onclick="exportConversations()">
+    <div class="btn-group">
+        <button class="btn btn-success" onclick="exportConversations()">
             <i class="fas fa-download me-2"></i>Export
         </button>
-        <button class="btn btn-outline-secondary" onclick="loadStats()">
-            <i class="fas fa-chart-bar me-2"></i>Statistics
+        <button class="btn btn-info" onclick="showAnalytics()">
+            <i class="fas fa-chart-bar me-2"></i>Analytics
+        </button>
+        <button class="btn btn-outline-secondary" onclick="location.reload()">
+            <i class="fas fa-sync-alt me-2"></i>Refresh
         </button>
     </div>
 </div>
 
-<!-- Summary Statistics -->
+<!-- Enhanced Summary Statistics -->
 <div class="row mb-4">
     <div class="col-md-3 col-sm-6 mb-3">
-        <div class="card text-center">
-            <div class="card-body">
-                <h4 class="text-primary">{{ stats.total_calls }}</h4>
-                <small class="text-muted">Total Calls</small>
+        <div class="card bg-gradient-primary text-white">
+            <div class="card-body text-center">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h4 class="mb-0">{{ stats.total_calls }}</h4>
+                        <small>Total Calls</small>
+                    </div>
+                    <i class="fas fa-phone fa-2x opacity-75"></i>
+                </div>
+                <div class="progress mt-2" style="height: 4px;">
+                    <div class="progress-bar bg-light" style="width: 100%"></div>
+                </div>
             </div>
         </div>
     </div>
+    
     <div class="col-md-3 col-sm-6 mb-3">
-        <div class="card text-center">
-            <div class="card-body">
-                <h4 class="text-success">{{ stats.successful_calls }}</h4>
-                <small class="text-muted">Successful</small>
+        <div class="card bg-gradient-success text-white">
+            <div class="card-body text-center">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h4 class="mb-0">{{ stats.completed_calls }}</h4>
+                        <small>Completed</small>
+                    </div>
+                    <i class="fas fa-check-circle fa-2x opacity-75"></i>
+                </div>
+                <div class="progress mt-2" style="height: 4px;">
+                    <div class="progress-bar bg-light" style="width: {{ (stats.completed_calls / stats.total_calls * 100) if stats.total_calls > 0 else 0 }}%"></div>
+                </div>
             </div>
         </div>
     </div>
+    
     <div class="col-md-3 col-sm-6 mb-3">
-        <div class="card text-center">
-            <div class="card-body">
-                <h4 class="text-danger">{{ stats.failed_calls }}</h4>
-                <small class="text-muted">Failed</small>
+        <div class="card bg-gradient-info text-white">
+            <div class="card-body text-center">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h4 class="mb-0">{{ "%.1f"|format(stats.success_rate) }}%</h4>
+                        <small>Success Rate</small>
+                    </div>
+                    <i class="fas fa-chart-line fa-2x opacity-75"></i>
+                </div>
+                <div class="progress mt-2" style="height: 4px;">
+                    <div class="progress-bar bg-light" style="width: {{ stats.success_rate }}%"></div>
+                </div>
             </div>
         </div>
     </div>
+    
     <div class="col-md-3 col-sm-6 mb-3">
-        <div class="card text-center">
-            <div class="card-body">
-                <h4 class="text-info">{{ "%.0f"|format(stats.avg_duration) }}s</h4>
-                <small class="text-muted">Avg Duration</small>
+        <div class="card bg-gradient-warning text-white">
+            <div class="card-body text-center">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h4 class="mb-0">{{ "%.0f"|format(stats.avg_duration) }}s</h4>
+                        <small>Avg Duration</small>
+                    </div>
+                    <i class="fas fa-stopwatch fa-2x opacity-75"></i>
+                </div>
+                <div class="mt-1">
+                    <small>Total: {{ "%.1f"|format(stats.total_duration/60) }}min</small>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Filters -->
+<!-- Enhanced Filters -->
 <div class="card mb-4">
     <div class="card-header">
         <div class="row align-items-center">
             <div class="col">
                 <h5 class="mb-0">
-                    <i class="fas fa-filter me-2"></i>Filters & Search
+                    <i class="fas fa-filter me-2"></i>Advanced Filters & Search
                 </h5>
             </div>
             <div class="col-auto">
-                {% if filters.search or filters.status_filter or filters.campaign_filter %}
+                {% if filters.search or filters.status_filter or filters.campaign_filter or filters.date_from or filters.date_to %}
                     <a href="/history" class="btn btn-sm btn-outline-secondary">
-                        <i class="fas fa-times me-1"></i>Clear Filters
+                        <i class="fas fa-times me-1"></i>Clear All Filters
                     </a>
                 {% endif %}
             </div>
@@ -74,24 +112,26 @@
         <form method="get" action="/history" class="row g-3">
             <div class="col-md-4">
                 <label for="search" class="form-label">Search</label>
-                <input 
-                    type="text" 
-                    class="form-control" 
-                    id="search" 
-                    name="search" 
-                    value="{{ filters.search }}"
-                    placeholder="Phone number, name, or transcript..."
-                >
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                    <input 
+                        type="text" 
+                        class="form-control" 
+                        id="search" 
+                        name="search" 
+                        value="{{ filters.search }}"
+                        placeholder="Phone, name, or transcript..."
+                    >
+                </div>
             </div>
             
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label for="status_filter" class="form-label">Status</label>
                 <select class="form-select" id="status_filter" name="status_filter">
                     <option value="">All Statuses</option>
                     <option value="completed" {{ 'selected' if filters.status_filter == 'completed' }}>Completed</option>
                     <option value="failed" {{ 'selected' if filters.status_filter == 'failed' }}>Failed</option>
                     <option value="in_progress" {{ 'selected' if filters.status_filter == 'in_progress' }}>In Progress</option>
-                    <option value="pending" {{ 'selected' if filters.status_filter == 'pending' }}>Pending</option>
                 </select>
             </div>
             
@@ -107,9 +147,36 @@
                 </select>
             </div>
             
-            <div class="col-md-2 d-flex align-items-end">
-                <button type="submit" class="btn btn-primary w-100">
-                    <i class="fas fa-search me-2"></i>Filter
+            <div class="col-md-3">
+                <label for="date_from" class="form-label">Date Range</label>
+                <div class="row g-1">
+                    <div class="col-6">
+                        <input 
+                            type="date" 
+                            class="form-control form-control-sm" 
+                            id="date_from" 
+                            name="date_from" 
+                            value="{{ filters.date_from }}"
+                        >
+                    </div>
+                    <div class="col-6">
+                        <input 
+                            type="date" 
+                            class="form-control form-control-sm" 
+                            id="date_to" 
+                            name="date_to" 
+                            value="{{ filters.date_to }}"
+                        >
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-12 text-end">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-search me-2"></i>Apply Filters
+                </button>
+                <button type="button" class="btn btn-outline-info ms-2" onclick="saveFilter()">
+                    <i class="fas fa-bookmark me-2"></i>Save Filter
                 </button>
             </div>
         </form>
@@ -121,9 +188,17 @@
     <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0">
-                Conversations 
+                Conversation Records
                 <span class="badge bg-secondary">{{ pagination.total_items }}</span>
             </h5>
+            <div class="btn-group btn-group-sm">
+                <button class="btn btn-outline-primary" onclick="selectAllConversations()">
+                    <i class="fas fa-check-square me-1"></i>Select All
+                </button>
+                <button class="btn btn-outline-danger" onclick="bulkDeleteConversations()" disabled id="bulkDeleteBtn">
+                    <i class="fas fa-trash me-1"></i>Bulk Delete
+                </button>
+            </div>
             <small class="text-muted">
                 Showing {{ ((pagination.page - 1) * 20) + 1 }} - {{ ((pagination.page - 1) * 20) + conversations|length }} 
                 of {{ pagination.total_items }}
@@ -131,8 +206,11 @@
         </div>
         <div class="table-responsive">
             <table class="table table-hover mb-0">
-                <thead>
+                <thead class="table-light">
                     <tr>
+                        <th width="40">
+                            <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll()">
+                        </th>
                         <th>Contact</th>
                         <th>Agent</th>
                         <th>Campaign</th>
@@ -146,22 +224,32 @@
                     {% for conversation in conversations %}
                     <tr>
                         <td>
+                            <input type="checkbox" class="conversation-checkbox" value="{{ conversation.id }}" onchange="updateBulkActions()">
+                        </td>
+                        <td>
                             <div>
                                 <strong>{{ conversation.contact_name or 'Unknown' }}</strong>
                                 <br>
-                                <small class="text-muted">{{ conversation.phone_number }}</small>
+                                <small class="text-muted">
+                                    <i class="fas fa-phone me-1"></i>{{ conversation.phone_number }}
+                                </small>
                             </div>
                         </td>
                         <td>
                             <span class="badge bg-light text-dark">
+                                <i class="fas fa-robot me-1"></i>
                                 {{ conversation.agent.name if conversation.agent else 'Unknown' }}
                             </span>
                         </td>
                         <td>
                             {% if conversation.campaign %}
-                                <small>{{ conversation.campaign.name }}</small>
+                                <small class="text-primary">
+                                    <i class="fas fa-bullhorn me-1"></i>{{ conversation.campaign.name }}
+                                </small>
                             {% else %}
-                                <small class="text-muted">Direct Call</small>
+                                <small class="text-muted">
+                                    <i class="fas fa-phone-alt me-1"></i>Direct Call
+                                </small>
                             {% endif %}
                         </td>
                         <td>
@@ -171,18 +259,34 @@
                                 else 'bg-danger' if conversation.status == 'failed' 
                                 else 'bg-secondary' 
                             }}">
+                                <i class="fas fa-{{ 
+                                    'check' if conversation.status == 'completed'
+                                    else 'clock' if conversation.status == 'in_progress'
+                                    else 'times' if conversation.status == 'failed'
+                                    else 'question'
+                                }} me-1"></i>
                                 {{ conversation.status|title if conversation.status else 'Unknown' }}
                             </span>
                         </td>
                         <td>
                             {% if conversation.duration_seconds %}
-                                {{ "%.0f"|format(conversation.duration_seconds) }}s
+                                <div>
+                                    <strong>{{ "%.0f"|format(conversation.duration_seconds) }}s</strong>
+                                    <br>
+                                    <small class="text-muted">{{ "%.1f"|format(conversation.duration_seconds/60) }}min</small>
+                                </div>
                             {% else %}
                                 <span class="text-muted">-</span>
                             {% endif %}
                         </td>
                         <td>
-                            <small>{{ conversation.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                            <small>
+                                <i class="fas fa-calendar me-1"></i>
+                                {{ conversation.created_at.strftime('%Y-%m-%d') }}
+                                <br>
+                                <i class="fas fa-clock me-1"></i>
+                                {{ conversation.created_at.strftime('%H:%M') }}
+                            </small>
                         </td>
                         <td>
                             <div class="btn-group btn-group-sm">
@@ -195,23 +299,38 @@
                                 </button>
                                 
                                 {% if conversation.transcript %}
-                                    <button 
-                                        class="btn btn-outline-info" 
-                                        onclick="viewTranscript({{ conversation.id }})"
-                                        title="View Transcript"
-                                    >
-                                        <i class="fas fa-file-alt"></i>
-                                    </button>
+                                    <div class="dropdown">
+                                        <button class="btn btn-outline-info dropdown-toggle" data-bs-toggle="dropdown" title="Download Transcript">
+                                            <i class="fas fa-file-alt"></i>
+                                        </button>
+                                        <ul class="dropdown-menu">
+                                            <li><a class="dropdown-item" href="/history/{{ conversation.id }}/download-transcript?format=pdf">
+                                                <i class="fas fa-file-pdf text-danger me-2"></i>PDF
+                                            </a></li>
+                                            <li><a class="dropdown-item" href="/history/{{ conversation.id }}/download-transcript?format=txt">
+                                                <i class="fas fa-file-alt text-info me-2"></i>Text
+                                            </a></li>
+                                            <li><a class="dropdown-item" href="/history/{{ conversation.id }}/download-transcript?format=json">
+                                                <i class="fas fa-file-code text-warning me-2"></i>JSON
+                                            </a></li>
+                                        </ul>
+                                    </div>
                                 {% endif %}
                                 
-                                {% if conversation.elevenlabs_conversation_id %}
-                                    <button 
-                                        class="btn btn-outline-success" 
-                                        onclick="playAudio({{ conversation.id }})"
-                                        title="Play Audio"
-                                    >
-                                        <i class="fas fa-play"></i>
-                                    </button>
+                                {% if conversation.external_conversation_id %}
+                                    <div class="dropdown">
+                                        <button class="btn btn-outline-success dropdown-toggle" data-bs-toggle="dropdown" title="Download Recording">
+                                            <i class="fas fa-download"></i>
+                                        </button>
+                                        <ul class="dropdown-menu">
+                                            <li><a class="dropdown-item" href="/history/{{ conversation.id }}/download-recording?format=mp3">
+                                                <i class="fas fa-music text-primary me-2"></i>MP3
+                                            </a></li>
+                                            <li><a class="dropdown-item" href="/history/{{ conversation.id }}/download-recording?format=wav">
+                                                <i class="fas fa-volume-up text-success me-2"></i>WAV
+                                            </a></li>
+                                        </ul>
+                                    </div>
                                 {% endif %}
                                 
                                 <button 
@@ -229,22 +348,27 @@
             </table>
         </div>
         
-        <!-- Pagination -->
+        <!-- Enhanced Pagination -->
         {% if pagination.total_pages > 1 %}
             <div class="card-footer">
                 <nav aria-label="Conversations pagination">
                     <ul class="pagination justify-content-center mb-0">
                         {% if pagination.has_prev %}
                             <li class="page-item">
-                                <a class="page-link" href="?page={{ pagination.page - 1 }}{% if filters.search %}&search={{ filters.search }}{% endif %}{% if filters.status_filter %}&status_filter={{ filters.status_filter }}{% endif %}{% if filters.campaign_filter %}&campaign_filter={{ filters.campaign_filter }}{% endif %}">
-                                    Previous
+                                <a class="page-link" href="?page=1{% if filters.search %}&search={{ filters.search }}{% endif %}{% if filters.status_filter %}&status_filter={{ filters.status_filter }}{% endif %}{% if filters.campaign_filter %}&campaign_filter={{ filters.campaign_filter }}{% endif %}{% if filters.date_from %}&date_from={{ filters.date_from }}{% endif %}{% if filters.date_to %}&date_to={{ filters.date_to }}{% endif %}">
+                                    <i class="fas fa-angle-double-left"></i>
+                                </a>
+                            </li>
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ pagination.page - 1 }}{% if filters.search %}&search={{ filters.search }}{% endif %}{% if filters.status_filter %}&status_filter={{ filters.status_filter }}{% endif %}{% if filters.campaign_filter %}&campaign_filter={{ filters.campaign_filter }}{% endif %}{% if filters.date_from %}&date_from={{ filters.date_from }}{% endif %}{% if filters.date_to %}&date_to={{ filters.date_to }}{% endif %}">
+                                    <i class="fas fa-angle-left"></i>
                                 </a>
                             </li>
                         {% endif %}
                         
                         {% for page_num in range(max(1, pagination.page - 2), min(pagination.total_pages + 1, pagination.page + 3)) %}
                             <li class="page-item {{ 'active' if page_num == pagination.page }}">
-                                <a class="page-link" href="?page={{ page_num }}{% if filters.search %}&search={{ filters.search }}{% endif %}{% if filters.status_filter %}&status_filter={{ filters.status_filter }}{% endif %}{% if filters.campaign_filter %}&campaign_filter={{ filters.campaign_filter }}{% endif %}">
+                                <a class="page-link" href="?page={{ page_num }}{% if filters.search %}&search={{ filters.search }}{% endif %}{% if filters.status_filter %}&status_filter={{ filters.status_filter }}{% endif %}{% if filters.campaign_filter %}&campaign_filter={{ filters.campaign_filter }}{% endif %}{% if filters.date_from %}&date_from={{ filters.date_from }}{% endif %}{% if filters.date_to %}&date_to={{ filters.date_to }}{% endif %}">
                                     {{ page_num }}
                                 </a>
                             </li>
@@ -252,39 +376,56 @@
                         
                         {% if pagination.has_next %}
                             <li class="page-item">
-                                <a class="page-link" href="?page={{ pagination.page + 1 }}{% if filters.search %}&search={{ filters.search }}{% endif %}{% if filters.status_filter %}&status_filter={{ filters.status_filter }}{% endif %}{% if filters.campaign_filter %}&campaign_filter={{ filters.campaign_filter }}{% endif %}">
-                                    Next
+                                <a class="page-link" href="?page={{ pagination.page + 1 }}{% if filters.search %}&search={{ filters.search }}{% endif %}{% if filters.status_filter %}&status_filter={{ filters.status_filter }}{% endif %}{% if filters.campaign_filter %}&campaign_filter={{ filters.campaign_filter }}{% endif %}{% if filters.date_from %}&date_from={{ filters.date_from }}{% endif %}{% if filters.date_to %}&date_to={{ filters.date_to }}{% endif %}">
+                                    <i class="fas fa-angle-right"></i>
+                                </a>
+                            </li>
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ pagination.total_pages }}{% if filters.search %}&search={{ filters.search }}{% endif %}{% if filters.status_filter %}&status_filter={{ filters.status_filter }}{% endif %}{% if filters.campaign_filter %}&campaign_filter={{ filters.campaign_filter }}{% endif %}{% if filters.date_from %}&date_from={{ filters.date_from }}{% endif %}{% if filters.date_to %}&date_to={{ filters.date_to }}{% endif %}">
+                                    <i class="fas fa-angle-double-right"></i>
                                 </a>
                             </li>
                         {% endif %}
                     </ul>
                 </nav>
+                
+                <div class="text-center mt-2">
+                    <small class="text-muted">
+                        Page {{ pagination.page }} of {{ pagination.total_pages }} 
+                        ({{ pagination.total_items }} total conversations)
+                    </small>
+                </div>
             </div>
         {% endif %}
     </div>
 {% else %}
     <div class="text-center py-5">
         <i class="fas fa-history fa-5x text-muted mb-4"></i>
-        <h4 class="text-muted">No Call History</h4>
+        <h4 class="text-muted">No Call History Found</h4>
         <p class="text-muted mb-4">
-            {% if filters.search or filters.status_filter or filters.campaign_filter %}
-                No conversations match your filters. 
-                <a href="/history">Clear filters</a> to see all conversations.
+            {% if filters.search or filters.status_filter or filters.campaign_filter or filters.date_from or filters.date_to %}
+                No conversations match your current filters. 
+                <a href="/history" class="text-primary">Clear all filters</a> to see all conversations.
             {% else %}
                 You haven't made any calls yet. Start by creating a campaign or testing an agent.
             {% endif %}
         </p>
-        {% if not (filters.search or filters.status_filter or filters.campaign_filter) %}
-            <a href="/campaigns" class="btn btn-primary btn-lg">
-                <i class="fas fa-bullhorn me-2"></i>Create Campaign
-            </a>
+        {% if not (filters.search or filters.status_filter or filters.campaign_filter or filters.date_from or filters.date_to) %}
+            <div class="btn-group">
+                <a href="/campaigns" class="btn btn-primary btn-lg">
+                    <i class="fas fa-bullhorn me-2"></i>Create Campaign
+                </a>
+                <a href="/agents" class="btn btn-success btn-lg">
+                    <i class="fas fa-robot me-2"></i>Test Agent
+                </a>
+            </div>
         {% endif %}
     </div>
 {% endif %}
 
 <!-- Conversation Details Modal -->
 <div class="modal fade" id="conversationModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-xl">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">
@@ -297,54 +438,36 @@
                     <div class="spinner-border" role="status">
                         <span class="visually-hidden">Loading...</span>
                     </div>
+                    <p class="mt-2">Loading conversation details...</p>
                 </div>
             </div>
-        </div>
-    </div>
-</div>
-
-<!-- Transcript Modal -->
-<div class="modal fade" id="transcriptModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">
-                    <i class="fas fa-file-alt me-2"></i>Conversation Transcript
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body" id="transcriptContent">
-                <!-- Transcript content will be loaded here -->
-            </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-outline-primary" onclick="copyTranscript()">
-                    <i class="fas fa-copy me-2"></i>Copy
-                </button>
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Audio Player Modal -->
-<div class="modal fade" id="audioModal" tabindex="-1">
-    <div class="modal-dialog">
+<!-- Analytics Modal -->
+<div class="modal fade" id="analyticsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">
-                    <i class="fas fa-play me-2"></i>Call Recording
+                    <i class="fas fa-chart-bar me-2"></i>Call Analytics
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body text-center">
-                <audio id="audioPlayer" controls class="w-100" style="display: none;">
-                    Your browser does not support the audio element.
-                </audio>
-                <div id="audioLoading" class="py-4">
-                    <div class="spinner-border" role="status">
-                        <span class="visually-hidden">Loading audio...</span>
+            <div class="modal-body" id="analyticsContent">
+                <div class="row">
+                    <div class="col-md-6">
+                        <canvas id="hourlyVolumeChart"></canvas>
+                        <h6 class="text-center mt-2">Call Volume by Hour</h6>
                     </div>
-                    <p class="mt-2 text-muted">Loading call recording...</p>
+                    <div class="col-md-6">
+                        <canvas id="durationDistributionChart"></canvas>
+                        <h6 class="text-center mt-2">Call Duration Distribution</h6>
+                    </div>
                 </div>
             </div>
         </div>
@@ -367,27 +490,40 @@
                         <label for="export_format" class="form-label">Export Format</label>
                         <select class="form-select" id="export_format" name="format">
                             <option value="csv">CSV (Excel Compatible)</option>
-                            <option value="json">JSON</option>
+                            <option value="json">JSON (Data Format)</option>
+                            <option value="xlsx">Excel Spreadsheet</option>
                         </select>
                     </div>
                     
-                    <div class="form-check mb-3">
-                        <input type="checkbox" class="form-check-input" id="apply_filters" checked>
-                        <label class="form-check-label" for="apply_filters">
-                            Apply current filters to export
-                        </label>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input type="checkbox" class="form-check-input" id="apply_filters" checked>
+                            <label class="form-check-label" for="apply_filters">
+                                Apply current page filters to export
+                            </label>
+                        </div>
+                        
+                        <div class="form-check">
+                            <input type="checkbox" class="form-check-input" id="include_transcripts">
+                            <label class="form-check-label" for="include_transcripts">
+                                Include conversation transcripts
+                            </label>
+                        </div>
                     </div>
                     
                     <div class="alert alert-info">
                         <i class="fas fa-info-circle me-2"></i>
-                        Export will include: Contact info, agent details, status, duration, transcript, and timestamps.
+                        <strong>Export will include:</strong> Contact details, agent info, call status, duration, timestamps, and optional transcripts.
+                        {% if filters.search or filters.status_filter or filters.campaign_filter or filters.date_from or filters.date_to %}
+                            <br><strong>Active filters:</strong> Your current search and filter settings will be applied.
+                        {% endif %}
                     </div>
                 </form>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-primary" onclick="performExport()">
-                    <i class="fas fa-download me-2"></i>Download
+                    <i class="fas fa-download me-2"></i>Export Data
                 </button>
             </div>
         </div>
@@ -397,6 +533,7 @@
 
 {% block scripts %}
 <script>
+let selectedConversations = new Set();
 let currentConversationId = null;
 
 async function viewConversation(conversationId) {
@@ -410,6 +547,7 @@ async function viewConversation(conversationId) {
             <div class="spinner-border" role="status">
                 <span class="visually-hidden">Loading...</span>
             </div>
+            <p class="mt-2">Loading conversation details...</p>
         </div>
     `;
     
@@ -422,136 +560,284 @@ async function viewConversation(conversationId) {
         
         detailsDiv.innerHTML = `
             <div class="row">
-                <div class="col-md-6">
-                    <h6>Contact Information</h6>
-                    <p><strong>Name:</strong> ${conv.contact_name || 'Unknown'}</p>
-                    <p><strong>Phone:</strong> ${conv.phone_number}</p>
-                    <p><strong>Status:</strong> 
-                        <span class="badge bg-${conv.status === 'completed' ? 'success' : conv.status === 'failed' ? 'danger' : 'warning'}">
-                            ${conv.status}
-                        </span>
-                    </p>
+                <div class="col-lg-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h6 class="mb-0"><i class="fas fa-user me-2"></i>Contact Information</h6>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>Name:</strong> ${conv.contact_name || 'Unknown'}</p>
+                            <p><strong>Phone:</strong> ${conv.phone_number}</p>
+                            <p><strong>Status:</strong> 
+                                <span class="badge bg-${conv.status === 'completed' ? 'success' : conv.status === 'failed' ? 'danger' : 'warning'}">
+                                    ${conv.status}
+                                </span>
+                            </p>
+                            <p><strong>Cost:</strong> ${conv.cost || 'N/A'}</p>
+                        </div>
+                    </div>
                 </div>
-                <div class="col-md-6">
-                    <h6>Call Details</h6>
-                    <p><strong>Agent:</strong> ${conv.agent_name}</p>
-                    <p><strong>Campaign:</strong> ${conv.campaign_name}</p>
-                    <p><strong>Duration:</strong> ${conv.duration_seconds || 0} seconds</p>
-                    <p><strong>Date:</strong> ${new Date(conv.created_at).toLocaleString()}</p>
+                
+                <div class="col-lg-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h6 class="mb-0"><i class="fas fa-info-circle me-2"></i>Call Details</h6>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>Agent:</strong> ${conv.agent_name}</p>
+                            <p><strong>Campaign:</strong> ${conv.campaign_name}</p>
+                            <p><strong>Duration:</strong> ${conv.duration_seconds || 0} seconds</p>
+                            <p><strong>Started:</strong> ${new Date(conv.created_at).toLocaleString()}</p>
+                            ${conv.updated_at ? `<p><strong>Updated:</strong> ${new Date(conv.updated_at).toLocaleString()}</p>` : ''}
+                        </div>
+                    </div>
                 </div>
             </div>
             
             ${conv.transcript ? `
-                <hr>
-                <h6>Transcript Preview</h6>
-                <div class="border rounded p-3 bg-light" style="max-height: 200px; overflow-y: auto;">
-                    <small>${conv.transcript.substring(0, 500)}${conv.transcript.length > 500 ? '...' : ''}</small>
+                <div class="card mt-3">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0"><i class="fas fa-file-alt me-2"></i>Conversation Transcript</h6>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-primary" onclick="copyTranscript()">
+                                <i class="fas fa-copy me-1"></i>Copy
+                            </button>
+                            <div class="dropdown">
+                                <button class="btn btn-outline-success dropdown-toggle" data-bs-toggle="dropdown">
+                                    <i class="fas fa-download me-1"></i>Download
+                                </button>
+                                <ul class="dropdown-menu">
+                                    <li><a class="dropdown-item" href="/history/${conv.id}/download-transcript?format=pdf">PDF</a></li>
+                                    <li><a class="dropdown-item" href="/history/${conv.id}/download-transcript?format=txt">Text</a></li>
+                                    <li><a class="dropdown-item" href="/history/${conv.id}/download-transcript?format=json">JSON</a></li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="transcript-content p-3 border rounded bg-light" style="max-height: 300px; overflow-y: auto;">
+                            <pre style="white-space: pre-wrap; font-family: inherit; margin: 0;">${conv.transcript}</pre>
+                        </div>
+                    </div>
                 </div>
-                <button class="btn btn-outline-primary btn-sm mt-2" onclick="viewFullTranscript()">
-                    <i class="fas fa-expand-alt me-1"></i>View Full Transcript
-                </button>
-            ` : '<p class="text-muted">No transcript available</p>'}
+            ` : '<div class="alert alert-info mt-3"><i class="fas fa-info-circle me-2"></i>No transcript available for this conversation</div>'}
+            
+            ${conv.external_conversation_id ? `
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="fas fa-headphones me-2"></i>Call Recording</h6>
+                    </div>
+                    <div class="card-body text-center">
+                        <p class="text-muted mb-3">Download the original call recording</p>
+                        <div class="btn-group">
+                            <a href="/history/${conv.id}/download-recording?format=mp3" class="btn btn-primary">
+                                <i class="fas fa-music me-2"></i>Download MP3
+                            </a>
+                            <a href="/history/${conv.id}/download-recording?format=wav" class="btn btn-success">
+                                <i class="fas fa-volume-up me-2"></i>Download WAV
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            ` : '<div class="alert alert-warning mt-3"><i class="fas fa-exclamation-triangle me-2"></i>No recording available for this conversation</div>'}
         `;
         
     } catch (error) {
         detailsDiv.innerHTML = `
             <div class="alert alert-danger">
                 <i class="fas fa-exclamation-triangle me-2"></i>
-                Error loading conversation details
+                Error loading conversation details: ${error.message}
             </div>
         `;
     }
 }
 
-async function viewTranscript(conversationId) {
-    try {
-        const response = await fetch(`/history/${conversationId}`);
-        const data = await response.json();
-        const conv = data.conversation;
-        
-        const modal = new bootstrap.Modal(document.getElementById('transcriptModal'));
-        const contentDiv = document.getElementById('transcriptContent');
-        
-        if (conv.transcript) {
-            contentDiv.innerHTML = `
-                <div class="transcript-content p-3 border rounded" style="max-height: 400px; overflow-y: auto;">
-                    <pre style="white-space: pre-wrap; font-family: inherit;">${conv.transcript}</pre>
-                </div>
-            `;
-        } else {
-            contentDiv.innerHTML = `
-                <div class="text-center text-muted py-4">
-                    <i class="fas fa-file-alt fa-3x mb-3"></i>
-                    <p>No transcript available for this conversation</p>
-                </div>
-            `;
-        }
-        
-        modal.show();
-    } catch (error) {
-        alert('Error loading transcript');
-    }
-}
-
-async function playAudio(conversationId) {
-    const modal = new bootstrap.Modal(document.getElementById('audioModal'));
-    const audioPlayer = document.getElementById('audioPlayer');
-    const audioLoading = document.getElementById('audioLoading');
-    
-    audioPlayer.style.display = 'none';
-    audioLoading.style.display = 'block';
-    
-    modal.show();
-    
-    try {
-        const response = await fetch(`/history/${conversationId}/audio`);
-        const audioData = await response.json();
-        
-        if (audioData.audio_url) {
-            audioPlayer.src = audioData.audio_url;
-            audioPlayer.style.display = 'block';
-            audioLoading.style.display = 'none';
-        } else {
-            audioLoading.innerHTML = `
-                <div class="text-muted">
-                    <i class="fas fa-exclamation-circle fa-2x mb-3"></i>
-                    <p>Audio not available for this conversation</p>
-                </div>
-            `;
-        }
-    } catch (error) {
-        audioLoading.innerHTML = `
-            <div class="text-danger">
-                <i class="fas fa-exclamation-triangle fa-2x mb-3"></i>
-                <p>Error loading audio</p>
-            </div>
-        `;
-    }
-}
-
-function deleteConversation(conversationId) {
-    if (confirm('Are you sure you want to delete this conversation? This action cannot be undone.')) {
-        fetch(`/history/${conversationId}`, {
-            method: 'DELETE',
-            headers: {
-                'Content-Type': 'application/json',
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.message) {
-                location.reload();
-            } else {
-                alert('Error deleting conversation');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Error deleting conversation');
+function copyTranscript() {
+    const transcriptElement = document.querySelector('.transcript-content pre');
+    if (transcriptElement) {
+        const text = transcriptElement.textContent;
+        navigator.clipboard.writeText(text).then(() => {
+            showToast('Transcript copied to clipboard!', 'success');
+        }).catch(() => {
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            showToast('Transcript copied to clipboard!', 'success');
         });
     }
 }
 
+// Selection and bulk actions
+function toggleSelectAll() {
+    const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+    const checkboxes = document.querySelectorAll('.conversation-checkbox');
+    
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = selectAllCheckbox.checked;
+        if (selectAllCheckbox.checked) {
+            selectedConversations.add(parseInt(checkbox.value));
+        } else {
+            selectedConversations.delete(parseInt(checkbox.value));
+        }
+    });
+    
+    updateBulkActions();
+}
+
+function selectAllConversations() {
+    const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+    selectAllCheckbox.checked = true;
+    toggleSelectAll();
+}
+
+function updateBulkActions() {
+    const checkboxes = document.querySelectorAll('.conversation-checkbox:checked');
+    const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
+    
+    selectedConversations.clear();
+    checkboxes.forEach(checkbox => {
+        selectedConversations.add(parseInt(checkbox.value));
+    });
+    
+    bulkDeleteBtn.disabled = selectedConversations.size === 0;
+    bulkDeleteBtn.innerHTML = selectedConversations.size > 0 
+        ? `<i class="fas fa-trash me-1"></i>Delete (${selectedConversations.size})`
+        : '<i class="fas fa-trash me-1"></i>Bulk Delete';
+}
+
+async function bulkDeleteConversations() {
+    if (selectedConversations.size === 0) return;
+    
+    const confirmMessage = `Are you sure you want to delete ${selectedConversations.size} conversation(s)? This action cannot be undone.`;
+    if (!confirm(confirmMessage)) return;
+    
+    const deletePromises = Array.from(selectedConversations).map(id => 
+        fetch(`/history/${id}`, { method: 'DELETE' })
+    );
+    
+    try {
+        showToast('Deleting conversations...', 'info');
+        await Promise.all(deletePromises);
+        showToast(`Successfully deleted ${selectedConversations.size} conversation(s)`, 'success');
+        setTimeout(() => location.reload(), 1000);
+    } catch (error) {
+        showToast('Error deleting some conversations', 'error');
+    }
+}
+
+async function deleteConversation(conversationId) {
+    if (!confirm('Are you sure you want to delete this conversation? This action cannot be undone.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/history/${conversationId}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            showToast('Conversation deleted successfully', 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast(`Error: ${data.detail}`, 'error');
+        }
+    } catch (error) {
+        showToast('Error deleting conversation', 'error');
+    }
+}
+
+// Analytics
+async function showAnalytics() {
+    const modal = new bootstrap.Modal(document.getElementById('analyticsModal'));
+    modal.show();
+    
+    try {
+        // Render hourly volume chart
+        renderHourlyVolumeChart();
+        
+        // Render duration distribution chart  
+        renderDurationDistributionChart();
+        
+    } catch (error) {
+        console.error('Analytics error:', error);
+    }
+}
+
+function renderHourlyVolumeChart() {
+    const ctx = document.getElementById('hourlyVolumeChart').getContext('2d');
+    const hourlyData = {{ stats.hourly_volume|tojson }};
+    
+    // Create 24-hour array
+    const hourlyVolume = Array(24).fill(0);
+    hourlyData.forEach(item => {
+        hourlyVolume[item.hour] = item.count;
+    });
+    
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: Array.from({length: 24}, (_, i) => `${i}:00`),
+            datasets: [{
+                label: 'Calls per Hour',
+                data: hourlyVolume,
+                backgroundColor: 'rgba(54, 162, 235, 0.8)',
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                y: { beginAtZero: true }
+            }
+        }
+    });
+}
+
+function renderDurationDistributionChart() {
+    const ctx = document.getElementById('durationDistributionChart').getContext('2d');
+    
+    // Sample duration ranges (you can make this dynamic)
+    const durationRanges = ['0-30s', '30s-1m', '1-3m', '3-5m', '5m+'];
+    const durationCounts = [20, 35, 25, 15, 5]; // Sample data
+    
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: durationRanges,
+            datasets: [{
+                data: durationCounts,
+                backgroundColor: [
+                    'rgba(255, 99, 132, 0.8)',
+                    'rgba(54, 162, 235, 0.8)',
+                    'rgba(255, 205, 86, 0.8)',
+                    'rgba(75, 192, 192, 0.8)',
+                    'rgba(153, 102, 255, 0.8)'
+                ]
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom' }
+            }
+        }
+    });
+}
+
+// Export functionality
 function exportConversations() {
     const modal = new bootstrap.Modal(document.getElementById('exportModal'));
     modal.show();
@@ -560,17 +846,20 @@ function exportConversations() {
 function performExport() {
     const format = document.getElementById('export_format').value;
     const applyFilters = document.getElementById('apply_filters').checked;
+    const includeTranscripts = document.getElementById('include_transcripts').checked;
     
-    let exportUrl = `/history/export?format=${format}`;
+    let exportUrl = `/history/export/bulk?format=${format}&include_transcripts=${includeTranscripts}`;
     
     if (applyFilters) {
         const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.get('search')) exportUrl += `&search=${urlParams.get('search')}`;
-        if (urlParams.get('status_filter')) exportUrl += `&status_filter=${urlParams.get('status_filter')}`;
-        if (urlParams.get('campaign_filter')) exportUrl += `&campaign_filter=${urlParams.get('campaign_filter')}`;
+        ['search', 'status_filter', 'campaign_filter', 'date_from', 'date_to'].forEach(param => {
+            if (urlParams.get(param)) {
+                exportUrl += `&${param}=${urlParams.get(param)}`;
+            }
+        });
     }
     
-    // Create temporary link and click it to download
+    // Create temporary link and download
     const link = document.createElement('a');
     link.href = exportUrl;
     link.style.display = 'none';
@@ -579,57 +868,117 @@ function performExport() {
     document.body.removeChild(link);
     
     bootstrap.Modal.getInstance(document.getElementById('exportModal')).hide();
+    showToast('Export started! Download will begin shortly.', 'success');
 }
 
-function copyTranscript() {
-    const transcriptText = document.querySelector('#transcriptContent .transcript-content pre');
-    if (transcriptText) {
-        navigator.clipboard.writeText(transcriptText.textContent).then(() => {
-            // Show temporary success message
-            const button = event.target;
-            const originalText = button.innerHTML;
-            button.innerHTML = '<i class="fas fa-check me-2"></i>Copied!';
-            button.classList.remove('btn-outline-primary');
-            button.classList.add('btn-success');
-            
-            setTimeout(() => {
-                button.innerHTML = originalText;
-                button.classList.remove('btn-success');
-                button.classList.add('btn-outline-primary');
-            }, 2000);
-        }).catch(() => {
-            alert('Failed to copy transcript to clipboard');
-        });
+// Filter management
+function saveFilter() {
+    const currentFilters = {
+        search: document.getElementById('search').value,
+        status_filter: document.getElementById('status_filter').value,
+        campaign_filter: document.getElementById('campaign_filter').value,
+        date_from: document.getElementById('date_from').value,
+        date_to: document.getElementById('date_to').value
+    };
+    
+    const filterName = prompt('Enter a name for this filter:');
+    if (filterName) {
+        // Save to localStorage
+        let savedFilters = JSON.parse(localStorage.getItem('taskvox_filters') || '{}');
+        savedFilters[filterName] = currentFilters;
+        localStorage.setItem('taskvox_filters', JSON.stringify(savedFilters));
+        showToast(`Filter "${filterName}" saved successfully!`, 'success');
     }
 }
 
-function viewFullTranscript() {
-    bootstrap.Modal.getInstance(document.getElementById('conversationModal')).hide();
-    viewTranscript(currentConversationId);
-}
-
-async function loadStats() {
-    try {
-        const response = await fetch('/history/stats/summary');
-        const stats = await response.json();
-        
-        // Create a simple stats modal or update existing elements
-        alert(`Detailed Statistics:\n\nTotal Conversations: ${stats.total_conversations}\nAverage Duration: ${stats.average_duration}s\n\nStatus Breakdown:\n${stats.status_breakdown.map(s => `${s.status}: ${s.count}`).join('\n')}`);
-        
-    } catch (error) {
-        alert('Error loading statistics');
+// Toast notification system
+function showToast(message, type = 'info') {
+    let toastContainer = document.getElementById('toast-container');
+    if (!toastContainer) {
+        toastContainer = document.createElement('div');
+        toastContainer.id = 'toast-container';
+        toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
+        toastContainer.style.zIndex = '9999';
+        document.body.appendChild(toastContainer);
     }
+    
+    const colors = { success: 'success', error: 'danger', warning: 'warning', info: 'info' };
+    const icons = { success: 'check-circle', error: 'times-circle', warning: 'exclamation-triangle', info: 'info-circle' };
+    
+    const toast = document.createElement('div');
+    toast.className = `toast align-items-center text-white bg-${colors[type]} border-0`;
+    toast.setAttribute('role', 'alert');
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">
+                <i class="fas fa-${icons[type]} me-2"></i>
+                ${message}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    `;
+    
+    toastContainer.appendChild(toast);
+    const bsToast = new bootstrap.Toast(toast, { delay: 5000 });
+    bsToast.show();
+    
+    toast.addEventListener('hidden.bs.toast', () => {
+        toast.remove();
+    });
 }
 
-// Auto-refresh status for in-progress calls (optional)
-setInterval(async () => {
-    const inProgressRows = document.querySelectorAll('tbody tr');
-    for (const row of inProgressRows) {
-        const statusBadge = row.querySelector('.badge');
-        if (statusBadge && statusBadge.textContent.toLowerCase().includes('progress')) {
-            // Could implement real-time updates here
+// Initialize page
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-refresh in progress calls every 30 seconds
+    setInterval(() => {
+        const inProgressElements = document.querySelectorAll('.badge:contains("In Progress")');
+        if (inProgressElements.length > 0) {
+            // Could implement selective refresh here
+            console.log('Checking in-progress calls...');
         }
-    }
-}, 30000); // Check every 30 seconds
+    }, 30000);
+});
 </script>
+
+<style>
+.bg-gradient-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+.bg-gradient-success {
+    background: linear-gradient(135deg, #56ab2f 0%, #a8e6cf 100%);
+}
+.bg-gradient-info {
+    background: linear-gradient(135deg, #3ca55c 0%, #b5fffc 100%);
+}
+.bg-gradient-warning {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.conversation-checkbox:checked {
+    background-color: #007bff;
+    border-color: #007bff;
+}
+
+.table-hover tbody tr:hover {
+    background-color: rgba(0,123,255,0.05);
+}
+
+.toast-container {
+    z-index: 9999;
+}
+
+.opacity-75 {
+    opacity: 0.75;
+}
+
+#hourlyVolumeChart, #durationDistributionChart {
+    height: 200px;
+}
+
+.transcript-content {
+    font-family: 'Courier New', monospace;
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+</style>
 {% endblock %}

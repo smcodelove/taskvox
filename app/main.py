@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Import routers
-from app.routers import auth, agents, campaigns, dashboard, settings, history
+from app.routers import auth, agents, campaigns, dashboard, settings, history, reports
 
 # Import database
 from app.database import engine, Base
@@ -51,6 +51,7 @@ app.include_router(agents.router, prefix="/agents", tags=["Agents"])
 app.include_router(campaigns.router, prefix="/campaigns", tags=["Campaigns"])
 app.include_router(settings.router, prefix="/settings", tags=["Settings"])
 app.include_router(history.router, prefix="/history", tags=["History"])
+app.include_router(reports.router, prefix="/reports", tags=["Reports"])
 
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):

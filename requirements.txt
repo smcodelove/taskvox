@@ -36,3 +36,7 @@ flake8==6.1.0
 
 # Static Files
 aiofiles==23.2.1
+
+reportlab==4.0.4
+fpdf2==2.7.6
+openpyxl==3.1.2
