@@ -235,6 +235,16 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link {{ 'active' if '/monitoring' in request.url.path else '' }}" href="/monitoring">
+                            <i class="fas fa-broadcast-tower"></i>Live Monitoring
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {{ 'active' if '/playback' in request.url.path else '' }}" href="/playback">
+                            <i class="fas fa-headphones"></i>Call Recordings
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link" href="/settings">
                             <i class="fas fa-cog"></i>Settings
                         </a>

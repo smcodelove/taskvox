@@ -5,7 +5,7 @@
 TasKvox AI - Database Models (White-Label Version)
 No ElevenLabs references visible to client
 """
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -72,16 +72,16 @@ class Conversation(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     agent_id = Column(Integer, ForeignKey("agents.id"), nullable=False)
     campaign_id = Column(Integer, ForeignKey("campaigns.id"), nullable=True)
-    external_conversation_id = Column(String(255), nullable=True)  # CHANGED: White-label field name
+    external_conversation_id = Column(String(255), nullable=True)
     phone_number = Column(String(20), nullable=True)
     contact_name = Column(String(255), nullable=True)
-    status = Column(String(50), nullable=True)  # completed, failed, in_progress
+    status = Column(String(50), nullable=True)
     duration_seconds = Column(Integer, nullable=True)
     transcript = Column(Text, nullable=True)
     cost = Column(String(50), nullable=True)
+    call_metadata = Column(JSON, nullable=True)  # ADD THIS LINE
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-
 
     
     # Relationships

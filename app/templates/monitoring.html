@@ -1,0 +1,663 @@
+<!-- COPY-PASTE THIS COMPLETE FILE -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h3 mb-1">🔴 Live Call Monitoring</h1>
+        <p class="text-muted">Real-time dashboard for active calls and performance monitoring</p>
+    </div>
+    <div class="d-flex align-items-center">
+        <span class="badge bg-success me-2" id="connectionStatus">
+            <i class="fas fa-circle me-1"></i>Connected
+        </span>
+        <span class="text-muted small">Last Update: <span id="lastUpdate">Loading...</span></span>
+    </div>
+</div>
+
+<!-- Real-time Statistics -->
+<div class="row mb-4">
+    <div class="col-md-2">
+        <div class="card bg-primary text-white">
+            <div class="card-body text-center">
+                <h3 class="mb-0" id="todayCalls">{{ stats.today_calls }}</h3>
+                <small>Today's Calls</small>
+                <div class="mt-1">
+                    <i class="fas fa-phone fa-lg opacity-75"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-2">
+        <div class="card bg-warning text-white">
+            <div class="card-body text-center">
+                <h3 class="mb-0" id="activeCalls">{{ stats.active_calls }}</h3>
+                <small>Active Now</small>
+                <div class="mt-1">
+                    <div class="spinner-border spinner-border-sm" role="status" id="activeSpinner" style="display: {{ 'block' if stats.active_calls > 0 else 'none' }};">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <i class="fas fa-play fa-lg opacity-75" id="activeIcon" style="display: {{ 'none' if stats.active_calls > 0 else 'block' }};"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-2">
+        <div class="card bg-success text-white">
+            <div class="card-body text-center">
+                <h3 class="mb-0" id="completedToday">{{ stats.completed_today }}</h3>
+                <small>Completed</small>
+                <div class="mt-1">
+                    <i class="fas fa-check-circle fa-lg opacity-75"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-2">
+        <div class="card bg-danger text-white">
+            <div class="card-body text-center">
+                <h3 class="mb-0" id="failedToday">{{ stats.failed_today }}</h3>
+                <small>Failed</small>
+                <div class="mt-1">
+                    <i class="fas fa-times-circle fa-lg opacity-75"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-2">
+        <div class="card bg-info text-white">
+            <div class="card-body text-center">
+                <h3 class="mb-0" id="successRate">{{ stats.success_rate }}%</h3>
+                <small>Success Rate</small>
+                <div class="mt-1">
+                    <i class="fas fa-chart-line fa-lg opacity-75"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-2">
+        <div class="card bg-secondary text-white">
+            <div class="card-body text-center">
+                <h3 class="mb-0" id="runningCampaigns">{{ stats.running_campaigns }}</h3>
+                <small>Running Campaigns</small>
+                <div class="mt-1">
+                    <i class="fas fa-bullhorn fa-lg opacity-75"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Live Activity Row -->
+<div class="row">
+    <!-- Active Calls Panel -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-phone-alt text-warning me-2"></i>Active Calls
+                    <span class="badge bg-warning ms-2" id="activeCallsCount">{{ active_calls|length }}</span>
+                </h5>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-primary" onclick="refreshActiveLoalls()">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                    <button class="btn btn-outline-success" onclick="testNewCall()">
+                        <i class="fas fa-plus"></i> Test Call
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0" style="max-height: 400px; overflow-y: auto;">
+                <div id="activeCallsList">
+                    {% if active_calls %}
+                        {% for call in active_calls %}
+                        <div class="call-item border-bottom p-3" data-call-id="{{ call.id }}">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <div class="d-flex align-items-center">
+                                        <div class="pulse-dot bg-success me-2"></div>
+                                        <strong>{{ call.contact_name or 'Unknown' }}</strong>
+                                    </div>
+                                    <small class="text-muted d-block">{{ call.phone_number }}</small>
+                                    <small class="text-info">Agent: {{ call.agent_name }}</small>
+                                </div>
+                                <div class="text-end">
+                                    <div class="call-duration badge bg-primary" data-start="{{ call.started_at }}">
+                                        {{ call.duration }}s
+                                    </div>
+                                    <br>
+                                    <small class="text-muted">{{ call.started_at[:16] }}</small>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center p-4" id="noActiveCalls">
+                            <i class="fas fa-phone-slash fa-3x text-muted mb-3"></i>
+                            <p class="text-muted">No active calls</p>
+                            <button class="btn btn-primary" onclick="testNewCall()">
+                                <i class="fas fa-phone me-2"></i>Start Test Call
+                            </button>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Recent Activity Panel -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-history text-info me-2"></i>Recent Activity
+                    <small class="text-muted">(Last 10 calls)</small>
+                </h5>
+            </div>
+            <div class="card-body p-0" style="max-height: 400px; overflow-y: auto;">
+                <div id="recentActivityList">
+                    {% for call in recent_activity %}
+                    <div class="activity-item border-bottom p-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-{{ 
+                                        'check-circle text-success' if call.status == 'completed'
+                                        else 'times-circle text-danger' if call.status == 'failed'
+                                        else 'clock text-warning'
+                                    }} me-2"></i>
+                                    <strong>{{ call.contact_name or 'Unknown' }}</strong>
+                                </div>
+                                <small class="text-muted d-block">{{ call.phone_number }}</small>
+                                <small class="text-info">{{ call.agent_name }} • {{ call.campaign_name }}</small>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge bg-{{ 
+                                    'success' if call.status == 'completed'
+                                    else 'danger' if call.status == 'failed'
+                                    else 'warning'
+                                }}">
+                                    {{ call.status|title }}
+                                </span>
+                                <br>
+                                <small class="text-muted">
+                                    {% if call.duration %}{{ call.duration }}s • {% endif %}
+                                    {{ call.created_at[:16] }}
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Performance Charts -->
+<div class="row mt-4">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-chart-line me-2"></i>Live Performance Tracking
+                </h5>
+            </div>
+            <div class="card-body">
+                <canvas id="livePerformanceChart" height="80"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-tachometer-alt me-2"></i>Call Volume Meter
+                </h5>
+            </div>
+            <div class="card-body text-center">
+                <div class="call-volume-meter mb-3">
+                    <canvas id="callVolumeMeter" width="150" height="150"></canvas>
+                </div>
+                <div class="row text-center">
+                    <div class="col-6">
+                        <h6 class="text-muted">Current</h6>
+                        <h4 id="currentVolume">{{ stats.active_calls }}</h4>
+                    </div>
+                    <div class="col-6">
+                        <h6 class="text-muted">Peak Today</h6>
+                        <h4 id="peakVolume">{{ stats.today_calls }}</h4>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Sound Alerts -->
+<audio id="newCallSound" preload="auto">
+    <source src="/static/sounds/new-call.mp3" type="audio/mpeg">
+</audio>
+<audio id="callCompleteSound" preload="auto">
+    <source src="/static/sounds/call-complete.mp3" type="audio/mpeg">
+</audio>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let ws = null;
+let performanceChart = null;
+let callVolumeMeter = null;
+let reconnectAttempts = 0;
+let maxReconnectAttempts = 5;
+
+// Initialize WebSocket connection
+function initWebSocket() {
+    const userId = {{ user.id }};
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/monitoring/ws/${userId}`;
+    
+    ws = new WebSocket(wsUrl);
+    
+    ws.onopen = function(event) {
+        console.log('Connected to monitoring WebSocket');
+        document.getElementById('connectionStatus').innerHTML = '<i class="fas fa-circle me-1"></i>Connected';
+        document.getElementById('connectionStatus').className = 'badge bg-success me-2';
+        reconnectAttempts = 0;
+    };
+    
+    ws.onmessage = function(event) {
+        const data = JSON.parse(event.data);
+        handleRealtimeUpdate(data);
+    };
+    
+    ws.onclose = function(event) {
+        console.log('WebSocket connection closed');
+        document.getElementById('connectionStatus').innerHTML = '<i class="fas fa-exclamation-circle me-1"></i>Disconnected';
+        document.getElementById('connectionStatus').className = 'badge bg-danger me-2';
+        
+        // Attempt to reconnect
+        if (reconnectAttempts < maxReconnectAttempts) {
+            setTimeout(() => {
+                reconnectAttempts++;
+                console.log(`Reconnection attempt ${reconnectAttempts}`);
+                initWebSocket();
+            }, 5000);
+        }
+    };
+    
+    ws.onerror = function(error) {
+        console.error('WebSocket error:', error);
+    };
+}
+
+// Handle real-time updates
+function handleRealtimeUpdate(message) {
+    if (message.type === 'stats_update') {
+        updateStats(message.data.stats);
+        updateActiveCalls(message.data.active_calls);
+        updateLastUpdate();
+        
+        // Update charts
+        if (performanceChart) {
+            addPerformanceDataPoint(message.data.stats);
+        }
+        
+        if (callVolumeMeter) {
+            updateCallVolumeMeter(message.data.stats.active_calls);
+        }
+    }
+    
+    if (message.type === 'call_status_update') {
+        handleCallStatusChange(message.data);
+    }
+    
+    if (message.type === 'new_call_started') {
+        handleNewCall(message.data);
+        playSound('newCallSound');
+    }
+    
+    if (message.type === 'call_completed') {
+        handleCallCompleted(message.data);
+        playSound('callCompleteSound');
+    }
+}
+
+// Update statistics display
+function updateStats(stats) {
+    document.getElementById('todayCalls').textContent = stats.today_calls;
+    document.getElementById('activeCalls').textContent = stats.active_calls;
+    document.getElementById('completedToday').textContent = stats.completed_today;
+    document.getElementById('failedToday').textContent = stats.failed_today;
+    document.getElementById('successRate').textContent = stats.success_rate + '%';
+    document.getElementById('runningCampaigns').textContent = stats.running_campaigns;
+    
+    // Show/hide spinner based on active calls
+    const spinner = document.getElementById('activeSpinner');
+    const icon = document.getElementById('activeIcon');
+    
+    if (stats.active_calls > 0) {
+        spinner.style.display = 'block';
+        icon.style.display = 'none';
+    } else {
+        spinner.style.display = 'none';
+        icon.style.display = 'block';
+    }
+    
+    // Update active calls count badge
+    document.getElementById('activeCallsCount').textContent = stats.active_calls;
+}
+
+// Update active calls list
+function updateActiveCalls(activeCalls) {
+    const listContainer = document.getElementById('activeCallsList');
+    
+    if (activeCalls.length === 0) {
+        listContainer.innerHTML = `
+            <div class="text-center p-4" id="noActiveCalls">
+                <i class="fas fa-phone-slash fa-3x text-muted mb-3"></i>
+                <p class="text-muted">No active calls</p>
+                <button class="btn btn-primary" onclick="testNewCall()">
+                    <i class="fas fa-phone me-2"></i>Start Test Call
+                </button>
+            </div>
+        `;
+        return;
+    }
+    
+    listContainer.innerHTML = activeCalls.map(call => `
+        <div class="call-item border-bottom p-3" data-call-id="${call.id}">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="d-flex align-items-center">
+                        <div class="pulse-dot bg-success me-2"></div>
+                        <strong>${call.contact_name || 'Unknown'}</strong>
+                    </div>
+                    <small class="text-muted d-block">${call.phone_number}</small>
+                    <small class="text-info">Agent: ${call.agent_name}</small>
+                </div>
+                <div class="text-end">
+                    <div class="call-duration badge bg-primary" data-start="${call.started_at}">
+                        ${call.duration}s
+                    </div>
+                    <br>
+                    <small class="text-muted">${call.started_at.substring(0, 16)}</small>
+                </div>
+            </div>
+        </div>
+    `).join('');
+    
+    // Start duration timers
+    startDurationTimers();
+}
+
+// Start live duration timers
+function startDurationTimers() {
+    document.querySelectorAll('.call-duration').forEach(element => {
+        const startTime = new Date(element.dataset.start);
+        
+        setInterval(() => {
+            const now = new Date();
+            const duration = Math.floor((now - startTime) / 1000);
+            element.textContent = duration + 's';
+        }, 1000);
+    });
+}
+
+// Update last update timestamp
+function updateLastUpdate() {
+    const now = new Date();
+    document.getElementById('lastUpdate').textContent = now.toLocaleTimeString();
+}
+
+// Initialize charts
+function initCharts() {
+    // Performance chart
+    const perfCtx = document.getElementById('livePerformanceChart').getContext('2d');
+    performanceChart = new Chart(perfCtx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Active Calls',
+                data: [],
+                borderColor: '#007bff',
+                backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                tension: 0.4,
+                fill: true
+            }, {
+                label: 'Success Rate %',
+                data: [],
+                borderColor: '#28a745',
+                backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                tension: 0.4,
+                yAxisID: 'y1'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'top' }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: { display: true, text: 'Active Calls' }
+                },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    max: 100,
+                    title: { display: true, text: 'Success Rate (%)' },
+                    grid: { drawOnChartArea: false }
+                }
+            },
+            animation: { duration: 0 }
+        }
+    });
+    
+    // Call volume meter (gauge)
+    const meterCtx = document.getElementById('callVolumeMeter').getContext('2d');
+    callVolumeMeter = new Chart(meterCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Active', 'Remaining'],
+            datasets: [{
+                data: [{{ stats.active_calls }}, 100 - {{ stats.active_calls }}],
+                backgroundColor: ['#28a745', '#e9ecef'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            circumference: Math.PI,
+            rotation: Math.PI,
+            cutout: '70%',
+            plugins: {
+                legend: { display: false },
+                tooltip: { enabled: false }
+            }
+        }
+    });
+}
+
+// Add data point to performance chart
+function addPerformanceDataPoint(stats) {
+    const now = new Date();
+    const timeLabel = now.toLocaleTimeString();
+    
+    performanceChart.data.labels.push(timeLabel);
+    performanceChart.data.datasets[0].data.push(stats.active_calls);
+    performanceChart.data.datasets[1].data.push(stats.success_rate);
+    
+    // Keep only last 20 data points
+    if (performanceChart.data.labels.length > 20) {
+        performanceChart.data.labels.shift();
+        performanceChart.data.datasets[0].data.shift();
+        performanceChart.data.datasets[1].data.shift();
+    }
+    
+    performanceChart.update('none');
+}
+
+// Update call volume meter
+function updateCallVolumeMeter(activeCount) {
+    const maxCalls = 100; // Adjust based on your needs
+    const remaining = Math.max(0, maxCalls - activeCount);
+    
+    callVolumeMeter.data.datasets[0].data = [activeCount, remaining];
+    callVolumeMeter.update();
+    
+    document.getElementById('currentVolume').textContent = activeCount;
+}
+
+// Sound notifications (continued)
+function playSound(soundId) {
+   const audio = document.getElementById(soundId);
+   if (audio) {
+       audio.play().catch(e => console.log('Audio play failed:', e));
+   }
+}
+
+// Handle call status changes
+function handleCallStatusChange(data) {
+   console.log('Call status updated:', data);
+   // You can add visual notifications here
+   showNotification(`Call ${data.conversation_id} status updated to ${data.new_status}`, 'info');
+}
+
+// Handle new call
+function handleNewCall(data) {
+   console.log('New call started:', data);
+   showNotification(`New call started to ${data.phone_number}`, 'success');
+}
+
+// Handle call completed
+function handleCallCompleted(data) {
+   console.log('Call completed:', data);
+   showNotification(`Call to ${data.phone_number} completed`, 'info');
+}
+
+// Utility functions
+function refreshActiveCalls() {
+   location.reload();
+}
+
+function testNewCall() {
+   // Redirect to campaigns page to start a single call
+   window.location.href = '/campaigns';
+}
+
+// Notification system
+function showNotification(message, type = 'info') {
+   // Create notification element
+   const notification = document.createElement('div');
+   notification.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+   notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+   
+   notification.innerHTML = `
+       <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'times-circle' : 'info-circle'} me-2"></i>
+       ${message}
+       <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+   `;
+   
+   document.body.appendChild(notification);
+   
+   // Auto-remove after 5 seconds
+   setTimeout(() => {
+       if (notification.parentNode) {
+           notification.remove();
+       }
+   }, 5000);
+}
+
+// Initialize everything when page loads
+document.addEventListener('DOMContentLoaded', function() {
+   initWebSocket();
+   initCharts();
+   startDurationTimers();
+   
+   // Update timestamp every second
+   setInterval(updateLastUpdate, 1000);
+});
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', function() {
+   if (ws) {
+       ws.close();
+   }
+});
+</script>
+
+<style>
+.pulse-dot {
+   width: 8px;
+   height: 8px;
+   border-radius: 50%;
+   animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+   0% {
+       box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7);
+   }
+   70% {
+       box-shadow: 0 0 0 10px rgba(40, 167, 69, 0);
+   }
+   100% {
+       box-shadow: 0 0 0 0 rgba(40, 167, 69, 0);
+   }
+}
+
+.call-item {
+   transition: background-color 0.2s ease;
+}
+
+.call-item:hover {
+   background-color: #f8f9fa;
+}
+
+.activity-item {
+   transition: background-color 0.2s ease;
+}
+
+.activity-item:hover {
+   background-color: #f8f9fa;
+}
+
+.card-body {
+   position: relative;
+}
+
+.spinner-border-sm {
+   width: 1rem;
+   height: 1rem;
+}
+
+.opacity-75 {
+   opacity: 0.75;
+}
+
+/* Connection status indicator */
+.badge {
+   transition: all 0.3s ease;
+}
+
+/* Chart containers */
+#livePerformanceChart {
+   height: 200px;
+}
+
+#callVolumeMeter {
+   max-width: 150px;
+   max-height: 150px;
+}
+</style>
+{% endblock %}
