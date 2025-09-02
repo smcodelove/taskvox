@@ -13,6 +13,9 @@
         <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createCampaignModal">
             <i class="fas fa-plus me-2"></i>Create Campaign
         </button>
+        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#singleCallModal">
+            <i class="fas fa-phone me-2"></i>Single Call
+        </button>
         <button class="btn btn-outline-info" onclick="location.reload()" title="Refresh">
             <i class="fas fa-sync-alt"></i>
         </button>
@@ -63,6 +66,40 @@
                     {% endif %}
                 </h3>
                 <small>Success Rate</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Single Call Quick Actions Card -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card border-success">
+            <div class="card-header bg-light">
+                <h5 class="mb-0 text-success">
+                    <i class="fas fa-phone me-2"></i>Quick Single Call Actions
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-8">
+                        <p class="mb-2">Make instant single calls to test your agents or contact specific customers</p>
+                        <small class="text-muted">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Perfect for testing agent performance, following up on leads, or making quick customer calls
+                        </small>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <div class="btn-group">
+                            <button class="btn btn-success btn-lg" data-bs-toggle="modal" data-bs-target="#singleCallModal">
+                                <i class="fas fa-phone me-2"></i>Make Single Call
+                            </button>
+                            <button class="btn btn-outline-success" onclick="showRecentSingleCalls()">
+                                <i class="fas fa-history me-2"></i>Recent
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -154,9 +191,14 @@
         <i class="fas fa-bullhorn fa-5x text-muted mb-4"></i>
         <h4 class="text-muted">No Voice Campaigns Yet</h4>
         <p class="text-muted mb-4">Create your first campaign to start making bulk voice calls</p>
-        <button class="btn btn-primary btn-lg" data-bs-toggle="modal" data-bs-target="#createCampaignModal">
-            <i class="fas fa-plus me-2"></i>Create Your First Campaign
-        </button>
+        <div class="btn-group">
+            <button class="btn btn-primary btn-lg" data-bs-toggle="modal" data-bs-target="#createCampaignModal">
+                <i class="fas fa-plus me-2"></i>Create Campaign
+            </button>
+            <button class="btn btn-success btn-lg" data-bs-toggle="modal" data-bs-target="#singleCallModal">
+                <i class="fas fa-phone me-2"></i>Try Single Call
+            </button>
+        </div>
     </div>
 {% endif %}
 
@@ -232,10 +274,149 @@
         </div>
     </div>
 </div>
+
+<!-- Single Call Modal -->
+<div class="modal fade" id="singleCallModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form id="singleCallForm">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title">
+                        <i class="fas fa-phone me-2"></i>Make Single Call
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    {% if not agents %}
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            You need to create at least one AI agent before making calls.
+                            <a href="/agents" class="alert-link">Create Agent First</a>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <strong>Single Call Feature:</strong> Make instant calls to test agents or contact specific customers. Perfect for quick follow-ups and agent testing.
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="single_call_agent" class="form-label">Select Agent *</label>
+                                    <select class="form-select form-select-lg" id="single_call_agent" required>
+                                        <option value="">Choose an agent...</option>
+                                        {% for agent in agents %}
+                                            <option value="{{ agent.id }}" data-voice="{{ agent.voice_id }}">
+                                                {{ agent.name }}
+                                                {% if agent.voice_id %}
+                                                    <small>({{ agent.voice_id[:20] }}...)</small>
+                                                {% endif %}
+                                            </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="single_call_phone" class="form-label">Phone Number *</label>
+                                    <input 
+                                        type="tel" 
+                                        class="form-control form-control-lg" 
+                                        id="single_call_phone" 
+                                        required 
+                                        placeholder="+91XXXXXXXXXX"
+                                    >
+                                    <div class="form-text">
+                                        <i class="fas fa-flag-alt text-warning me-1"></i>
+                                        Include country code (+91 for India, +1 for US)
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="single_call_name" class="form-label">Contact Name (Optional)</label>
+                                    <input 
+                                        type="text" 
+                                        class="form-control" 
+                                        id="single_call_name" 
+                                        placeholder="John Doe"
+                                    >
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="call_purpose" class="form-label">Call Purpose</label>
+                                    <select class="form-select" id="call_purpose">
+                                        <option value="test">Agent Testing</option>
+                                        <option value="followup">Lead Follow-up</option>
+                                        <option value="support">Customer Support</option>
+                                        <option value="survey">Survey/Feedback</option>
+                                        <option value="other">Other</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="single_call_notes" class="form-label">Call Notes (Optional)</label>
+                            <textarea 
+                                class="form-control" 
+                                id="single_call_notes" 
+                                rows="3"
+                                placeholder="Any specific instructions or context for this call..."
+                            ></textarea>
+                        </div>
+                        
+                        <!-- Call Preview Section -->
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6 class="card-title">
+                                    <i class="fas fa-preview me-2"></i>Call Preview
+                                </h6>
+                                <div id="callPreview">
+                                    <p class="text-muted">Select an agent and enter phone number to see call preview</p>
+                                </div>
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    {% if agents %}
+                        <button type="submit" class="btn btn-success btn-lg">
+                            <i class="fas fa-phone me-2"></i>Make Call Now
+                        </button>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Single Calls Modal -->
+<div class="modal fade" id="recentCallsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-history me-2"></i>Recent Single Calls
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="recentCallsContent">
+                <!-- Recent calls will load here -->
+            </div>
+            <div class="modal-footer">
+                <a href="/history" class="btn btn-primary">View All Call History</a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+// Existing campaign functions
 async function launchCampaign(campaignId) {
     if (!confirm('Are you sure you want to launch this campaign?')) {
         return;
@@ -287,6 +468,258 @@ async function deleteCampaign(campaignId) {
 
 function viewCampaign(campaignId) {
     window.location.href = `/history?campaign_filter=${campaignId}`;
+}
+
+// NEW: Single Call Functions
+document.addEventListener('DOMContentLoaded', function() {
+    // Update call preview when agent or phone changes
+    const agentSelect = document.getElementById('single_call_agent');
+    const phoneInput = document.getElementById('single_call_phone');
+    const nameInput = document.getElementById('single_call_name');
+    
+    function updateCallPreview() {
+        const agentId = agentSelect.value;
+        const phone = phoneInput.value;
+        const name = nameInput.value;
+        const previewDiv = document.getElementById('callPreview');
+        
+        if (agentId && phone) {
+            const selectedOption = agentSelect.querySelector(`option[value="${agentId}"]`);
+            const agentName = selectedOption ? selectedOption.textContent.trim() : 'Selected Agent';
+            
+            previewDiv.innerHTML = `
+                <div class="row">
+                    <div class="col-6">
+                        <strong>Agent:</strong> ${agentName}<br>
+                        <strong>Calling:</strong> ${phone}
+                    </div>
+                    <div class="col-6">
+                        <strong>Contact:</strong> ${name || 'Unknown'}<br>
+                        <strong>Status:</strong> <span class="badge bg-info">Ready to Call</span>
+                    </div>
+                </div>
+            `;
+        } else {
+            previewDiv.innerHTML = '<p class="text-muted">Select an agent and enter phone number to see call preview</p>';
+        }
+    }
+    
+    if (agentSelect) agentSelect.addEventListener('change', updateCallPreview);
+    if (phoneInput) phoneInput.addEventListener('input', updateCallPreview);
+    if (nameInput) nameInput.addEventListener('input', updateCallPreview);
+});
+
+// Handle single call form submission
+document.getElementById('singleCallForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const submitBtn = this.querySelector('button[type="submit"]');
+    const originalText = submitBtn.innerHTML;
+    
+    // Get form data
+    const agentId = document.getElementById('single_call_agent').value;
+    const phoneNumber = document.getElementById('single_call_phone').value;
+    const contactName = document.getElementById('single_call_name').value;
+    const callPurpose = document.getElementById('call_purpose').value;
+    const notes = document.getElementById('single_call_notes').value;
+    
+    if (!agentId || !phoneNumber) {
+        showToast('Please select an agent and enter phone number', 'warning');
+        return;
+    }
+    
+    // Validate phone number format
+    const phoneRegex = /^\+[1-9]\d{1,14}$/;
+    if (!phoneRegex.test(phoneNumber)) {
+        showToast('Please enter a valid phone number with country code (e.g., +919876543210)', 'error');
+        return;
+    }
+    
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Making Call...';
+    
+    try {
+        const response = await fetch('/campaigns/api/single-call', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                agent_id: parseInt(agentId),
+                phone_number: phoneNumber,
+                contact_name: contactName,
+                call_purpose: callPurpose,
+                notes: notes
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showToast('Call initiated successfully! 🎉', 'success');
+            bootstrap.Modal.getInstance(document.getElementById('singleCallModal')).hide();
+            
+            // Show success message with call details
+            setTimeout(() => {
+                showCallSuccessMessage(result.conversation_id, phoneNumber, contactName);
+            }, 500);
+        } else {
+            showToast(`Error: ${result.detail || 'Failed to make call'}`, 'error');
+        }
+        
+    } catch (error) {
+        console.error('Call error:', error);
+        showToast('Error making call. Please check your connection.', 'error');
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalText;
+    }
+});
+
+// Show call success message
+function showCallSuccessMessage(conversationId, phone, name) {
+    const message = `
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <h6 class="alert-heading">
+                <i class="fas fa-phone-alt me-2"></i>Call Started Successfully!
+            </h6>
+            <p class="mb-2">
+                <strong>Calling:</strong> ${name || 'Contact'} (${phone})<br>
+                <strong>Call ID:</strong> ${conversationId}
+            </p>
+            <hr>
+            <div class="btn-group">
+                <a href="/history" class="btn btn-sm btn-outline-success">
+                    <i class="fas fa-history me-1"></i>View in History
+                </a>
+                <button class="btn btn-sm btn-outline-primary" onclick="trackCall(${conversationId})">
+                    <i class="fas fa-eye me-1"></i>Track Call
+                </button>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+    
+    // Add to page
+    const container = document.querySelector('.main-content');
+    container.insertAdjacentHTML('afterbegin', message);
+    
+    // Auto-remove after 10 seconds
+    setTimeout(() => {
+        const alert = document.querySelector('.alert-success');
+        if (alert) {
+            const bsAlert = new bootstrap.Alert(alert);
+            bsAlert.close();
+        }
+    }, 10000);
+}
+
+// Track specific call
+function trackCall(conversationId) {
+    window.location.href = `/history?conversation_id=${conversationId}`;
+}
+
+// Show recent single calls
+async function showRecentSingleCalls() {
+    const modal = new bootstrap.Modal(document.getElementById('recentCallsModal'));
+    const content = document.getElementById('recentCallsContent');
+    
+    content.innerHTML = `
+        <div class="text-center py-4">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Loading recent calls...</p>
+        </div>
+    `;
+    
+    modal.show();
+    
+    try {
+        const response = await fetch('/campaigns/api/recent-single-calls');
+        const data = await response.json();
+        
+        if (data.calls && data.calls.length > 0) {
+            let callsHtml = '<div class="list-group">';
+            
+            data.calls.forEach(call => {
+                const statusColor = call.status === 'completed' ? 'success' : call.status === 'failed' ? 'danger' : 'warning';
+                callsHtml += `
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1">${call.contact_name || 'Unknown'}</h6>
+                                <p class="mb-1">${call.phone_number}</p>
+                                <small class="text-muted">${new Date(call.created_at).toLocaleString()}</small>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge bg-${statusColor}">${call.status}</span>
+                                <br>
+                                <small class="text-muted">${call.duration_seconds || 0}s</small>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            callsHtml += '</div>';
+            content.innerHTML = callsHtml;
+        } else {
+            content.innerHTML = `
+                <div class="text-center py-4">
+                    <i class="fas fa-phone-slash fa-3x text-muted mb-3"></i>
+                    <h5>No Recent Single Calls</h5>
+                    <p class="text-muted">You haven't made any single calls yet.</p>
+                    <button class="btn btn-success" onclick="bootstrap.Modal.getInstance(document.getElementById('recentCallsModal')).hide(); bootstrap.Modal.getInstance(document.getElementById('singleCallModal')).show();">
+                        <i class="fas fa-phone me-2"></i>Make Your First Call
+                    </button>
+                </div>
+            `;
+        }
+    } catch (error) {
+        content.innerHTML = `
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                Failed to load recent calls
+            </div>
+        `;
+    }
+}
+
+// Toast notification system
+function showToast(message, type = 'info') {
+    let toastContainer = document.getElementById('toast-container');
+    if (!toastContainer) {
+        toastContainer = document.createElement('div');
+        toastContainer.id = 'toast-container';
+        toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
+        toastContainer.style.zIndex = '9999';
+        document.body.appendChild(toastContainer);
+    }
+    
+    const colors = { success: 'success', error: 'danger', warning: 'warning', info: 'info' };
+    const icons = { success: 'check-circle', error: 'times-circle', warning: 'exclamation-triangle', info: 'info-circle' };
+    
+    const toast = document.createElement('div');
+    toast.className = `toast align-items-center text-white bg-${colors[type]} border-0`;
+    toast.setAttribute('role', 'alert');
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">
+                <i class="fas fa-${icons[type]} me-2"></i>
+                ${message}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    `;
+    
+    toastContainer.appendChild(toast);
+    const bsToast = new bootstrap.Toast(toast, { delay: 5000 });
+    bsToast.show();
+    
+    toast.addEventListener('hidden.bs.toast', () => {
+        toast.remove();
+    });
 }
 </script>
 {% endblock %}
