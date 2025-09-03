@@ -130,15 +130,18 @@ async def create_campaign_form(
         return RedirectResponse(url=f"/campaigns?error=Error creating voice campaign: {str(e)}", status_code=302)
 
 # FIXED: SINGLE CALL ENDPOINT with proper agent handling
+# FILE: app/routers/campaigns.py
+# REPLACE THE make_single_call FUNCTION WITH THIS:
+
 @router.post("/api/single-call")
 async def make_single_call(
     call_request: SingleCallRequest,
     current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    """Make a single call using Plivo - FIXED VERSION"""
+    """Make AI call using Plivo + ElevenLabs integration"""
     try:
-        # Validate agent exists and belongs to user
+        # Validate agent exists
         agent = db.query(models.Agent)\
             .filter(
                 models.Agent.id == call_request.agent_id,
@@ -149,11 +152,15 @@ async def make_single_call(
         if not agent:
             raise HTTPException(status_code=404, detail="Agent not found or inactive")
         
-        # Create conversation record first
+        # Check if agent has ElevenLabs ID
+        if not agent.external_agent_id:
+            raise HTTPException(status_code=400, detail="Agent not linked to AI service. Please sync agents first.")
+        
+        # Create conversation record
         conversation = models.Conversation(
             user_id=current_user.id,
             agent_id=call_request.agent_id,
-            campaign_id=None,  # Single calls have no campaign
+            campaign_id=None,
             phone_number=call_request.phone_number,
             contact_name=call_request.contact_name,
             status="initiating"
@@ -169,38 +176,38 @@ async def make_single_call(
         except ValueError as e:
             conversation.status = "failed"
             db.commit()
-            raise HTTPException(status_code=400, detail=f"Plivo configuration error: {str(e)}")
+            raise HTTPException(status_code=400, detail=str(e))
         
-        # FIXED: Use safe attribute access for agent fields
+        # Prepare metadata for AI agent
         agent_data = {
-            "agent_id": agent.id,
-            "conversation_id": conversation.id,
-            "agent_name": agent.name,
-            "agent_prompt": getattr(agent, 'system_prompt', None) or getattr(agent, 'prompt', '') or '',  # SAFE ACCESS
-            "contact_name": call_request.contact_name,
-            "call_purpose": call_request.call_purpose,
-            "notes": call_request.notes
+            "conversation_id": str(conversation.id),
+            "contact_name": call_request.contact_name or "",
+            "call_purpose": call_request.call_purpose or "general",
+            "notes": call_request.notes or "",
+            "user_id": str(current_user.id)
         }
         
-        # Make the call using Plivo
-        result = await plivo_client.make_call(
+        # Make AI call using Plivo + ElevenLabs
+        result = await plivo_client.make_ai_call(
             to_number=call_request.phone_number,
+            elevenlabs_agent_id=agent.external_agent_id,
             agent_data=agent_data
         )
         
         if result["success"]:
-            # Update conversation with call UUID
+            # Update conversation with call details
             conversation.external_call_id = result["call_uuid"]
             conversation.status = "in_progress"
             db.commit()
             
             return {
                 "success": True,
-                "message": "Call initiated successfully",
+                "message": "AI call initiated successfully",
                 "conversation_id": conversation.id,
                 "call_uuid": result["call_uuid"],
                 "phone_number": call_request.phone_number,
-                "agent_name": agent.name
+                "agent_name": agent.name,
+                "ai_agent_id": agent.external_agent_id
             }
         else:
             # Update status to failed
@@ -209,7 +216,7 @@ async def make_single_call(
             
             raise HTTPException(
                 status_code=400,
-                detail=f"Failed to initiate call: {result.get('error', 'Unknown error')}"
+                detail=f"Failed to initiate AI call: {result.get('error', 'Unknown error')}"
             )
             
     except HTTPException:
@@ -220,8 +227,7 @@ async def make_single_call(
             conversation.status = "failed"
             db.commit()
         
-        raise HTTPException(status_code=500, detail=f"Call initiation error: {str(e)}")
-
+        raise HTTPException(status_code=500, detail=f"AI call initiation error: {str(e)}")
 @router.get("/api")
 async def get_campaigns(
     current_user: models.User = Depends(auth.get_current_active_user_from_cookie),

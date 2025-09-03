@@ -189,7 +189,7 @@ async def get_active_calls(user_id: int, db: Session):
             "contact_name": call.contact_name,
             "agent_name": call.agent.name,
             "started_at": call.created_at.isoformat(),
-            "duration": int((datetime.now() - call.created_at).total_seconds())
+            "duration": int((datetime.now() - call.created_at.replace(tzinfo=None)).total_seconds()) if call.created_at else 0
         }
         for call in active_calls
     ]

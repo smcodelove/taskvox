@@ -1,4 +1,4 @@
-# app/plivo_client.py - RESPONSE OBJECT FIX
+# app/plivo_client.py - PLIVO + ELEVENLABS INTEGRATION
 
 import os
 import plivo
@@ -14,102 +14,87 @@ class PlivoClient:
         self.auth_id = auth_id or os.getenv("PLIVO_AUTH_ID")
         self.auth_token = auth_token or os.getenv("PLIVO_AUTH_TOKEN")
         self.from_number = os.getenv("PLIVO_FROM_NUMBER", "+918035736994")
-        self.answer_url = os.getenv("PLIVO_ANSWER_URL", "http://localhost:8000/api/plivo/answer")
+        
+        # ElevenLabs AI answer URL - will handle conversation
+        self.answer_url = os.getenv("ELEVENLABS_ANSWER_URL", "https://api.elevenlabs.io/v1/convai/conversations/phone/answer")
+        self.hangup_url = os.getenv("PLIVO_HANGUP_URL", "http://localhost:8000/api/plivo/hangup")
         
         if not all([self.auth_id, self.auth_token]):
             raise ValueError("Plivo credentials missing. Get them from https://console.plivo.com/")
         
-        # Initialize Plivo client
         try:
             self.client = plivo.RestClient(self.auth_id, self.auth_token)
-            logger.info("Plivo client initialized successfully")
+            logger.info("Plivo client initialized for AI calls")
         except Exception as e:
             logger.error(f"Plivo client initialization failed: {e}")
             self.client = None
     
-    async def make_call(self, to_number: str, agent_data: Dict = None) -> Dict:
-        """Make outbound call using Plivo - FIXED RESPONSE HANDLING"""
+    async def make_ai_call(self, to_number: str, elevenlabs_agent_id: str, agent_data: Dict = None) -> Dict:
+        """Make call that connects to ElevenLabs AI agent"""
         try:
             if not self.client:
-                return {
-                    "success": False,
-                    "error": "Plivo client not initialized"
-                }
+                return {"success": False, "error": "Plivo client not initialized"}
             
             # Clean phone number
             to_number = to_number.strip()
             if not to_number.startswith('+'):
                 to_number = '+' + to_number
             
-            # Call parameters
+            # Build answer URL with ElevenLabs agent parameters
+            answer_url = f"{self.answer_url}?agent_id={elevenlabs_agent_id}"
+            
+            # Add metadata as URL parameters
+            if agent_data:
+                url_params = []
+                for key, value in agent_data.items():
+                    if value:
+                        url_params.append(f"{key}={value}")
+                if url_params:
+                    answer_url += "&" + "&".join(url_params)
+            
+            # Plivo call parameters for AI integration
             call_params = {
                 'from_': self.from_number,
                 'to_': to_number,
-                'answer_url': self.answer_url,
-                'answer_method': 'GET'
+                'answer_url': answer_url,
+                'answer_method': 'POST',  # ElevenLabs expects POST
+                'hangup_url': self.hangup_url,
+                'hangup_method': 'POST',
+                'machine_detection': 'true'
             }
             
-            # Add machine detection if needed
-            if agent_data:
-                call_params['machine_detection'] = 'true'
-            
-            logger.info(f"Making Plivo call: {self.from_number} → {to_number}")
-            logger.info(f"Call parameters: {call_params}")
+            logger.info(f"Making AI call: {self.from_number} → {to_number}")
+            logger.info(f"AI Answer URL: {answer_url}")
             
             # Make the call
             response = self.client.calls.create(**call_params)
             
-            # FIXED: Safe access to response attributes
+            # Extract call UUID
             call_uuid = None
-            call_status = "initiated"
-            
-            # Try different ways to get call_uuid
             if hasattr(response, 'call_uuid'):
                 call_uuid = response.call_uuid
             elif hasattr(response, 'uuid'):
                 call_uuid = response.uuid
-            elif hasattr(response, 'id'):
-                call_uuid = response.id
-            elif isinstance(response, dict):
-                call_uuid = response.get('call_uuid') or response.get('uuid') or response.get('id')
             else:
-                # Fallback: generate UUID if response doesn't have one
                 import uuid
                 call_uuid = str(uuid.uuid4())
-                logger.warning("Response object missing call_uuid, generated fallback UUID")
-            
-            # Try to get call status
-            if hasattr(response, 'call_status'):
-                call_status = response.call_status
-            elif hasattr(response, 'status'):
-                call_status = response.status
-            elif isinstance(response, dict):
-                call_status = response.get('call_status', 'initiated')
-            
-            logger.info(f"Plivo response: Call UUID = {call_uuid}, Status = {call_status}")
             
             return {
                 "success": True,
                 "call_uuid": call_uuid,
-                "message": "Call initiated successfully with Plivo",
-                "call_status": call_status,
+                "message": "AI call initiated - Plivo + ElevenLabs",
                 "from_number": self.from_number,
-                "to_number": to_number
+                "to_number": to_number,
+                "ai_agent_id": elevenlabs_agent_id
             }
             
         except Exception as e:
-            error_msg = str(e)
-            logger.error(f"Plivo call failed: {error_msg}")
-            
-            return {
-                "success": False,
-                "error": f"Call failed: {error_msg}"
-            }
+            logger.error(f"AI call failed: {e}")
+            return {"success": False, "error": f"AI call failed: {str(e)}"}
     
     def verify_credentials(self) -> Dict:
         """Test Plivo credentials"""
         try:
-            # Direct API call method (most reliable)
             auth_string = f"{self.auth_id}:{self.auth_token}"
             auth_bytes = auth_string.encode('ascii')
             auth_b64 = base64.b64encode(auth_bytes).decode('ascii')
@@ -129,39 +114,16 @@ class PlivoClient:
                 data = response.json()
                 return {
                     "success": True,
-                    "method": "API",
                     "account_name": data.get('name', 'Plivo Account'),
                     "account_id": self.auth_id,
                     "cash_credits": data.get('cash_credits', '0.00'),
-                    "message": "Plivo credentials verified successfully"
-                }
-            elif response.status_code == 401:
-                return {
-                    "success": False,
-                    "error": "Invalid credentials. Check AUTH_ID and AUTH_TOKEN from Plivo Console"
+                    "message": "Plivo verified - Ready for AI calls"
                 }
             else:
                 return {
                     "success": False,
-                    "error": f"API Error {response.status_code}: {response.text}"
+                    "error": f"API Error {response.status_code}"
                 }
                 
         except Exception as e:
-            return {
-                "success": False,
-                "error": f"Connection failed: {str(e)}"
-            }
-    
-    def debug_response_structure(self, response) -> Dict:
-        """Debug helper to understand response structure"""
-        try:
-            response_info = {
-                "type": str(type(response)),
-                "attributes": [attr for attr in dir(response) if not attr.startswith('_')],
-                "dict_conversion": dict(response) if hasattr(response, '__iter__') else None
-            }
-            logger.info(f"Response structure: {response_info}")
-            return response_info
-        except Exception as e:
-            logger.error(f"Debug failed: {e}")
-            return {"error": str(e)}
+            return {"success": False, "error": str(e)}

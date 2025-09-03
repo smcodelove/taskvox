@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
 from dotenv import load_dotenv
+from app.routers import elevenlabs_webhooks, plivo_webhooks
 
 # Load environment variables
 load_dotenv()
@@ -54,6 +55,8 @@ app.include_router(history.router, prefix="/history", tags=["History"])
 app.include_router(reports.router, prefix="/reports", tags=["Reports"])
 app.include_router(monitoring.router, prefix="/monitoring", tags=["Monitoring"])
 app.include_router(playback.router, prefix="/playback", tags=["Playback"])
+app.include_router(elevenlabs_webhooks.router, prefix="", tags=["ElevenLabs Webhooks"])
+app.include_router(plivo_webhooks.router, prefix="", tags=["Plivo Webhooks"])
 
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
