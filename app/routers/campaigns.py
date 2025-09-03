@@ -1,9 +1,7 @@
-# FILE: app/routers/campaigns.py
-# REPLACE YOUR ENTIRE app/routers/campaigns.py WITH THIS
+# app/routers/campaigns.py - EXACT ISSUE FIX
 
 """
-TasKvox AI - Campaigns Router (Enhanced with Single Call Feature)
-No ElevenLabs references visible to client
+TasKvox AI - Campaigns Router (Fixed Agent Prompt Issue)
 """
 import io
 import csv
@@ -12,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Form, File, Uplo
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 from pydantic import BaseModel
 from datetime import datetime
 from ..plivo_client import PlivoClient 
@@ -24,7 +22,7 @@ from app.elevenlabs_client import ElevenLabsClient
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 
-# NEW: Pydantic models for single call
+# Pydantic models for single call
 class SingleCallRequest(BaseModel):
     agent_id: int
     phone_number: str
@@ -38,7 +36,7 @@ async def campaigns_page(
     current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    """Voice campaigns management page (white-label)"""
+    """Voice campaigns management page"""
     campaigns = db.query(models.Campaign)\
         .filter(models.Campaign.user_id == current_user.id)\
         .order_by(models.Campaign.created_at.desc()).all()
@@ -67,7 +65,7 @@ async def create_campaign_form(
     current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    """Create voice campaign from form submission (white-label)"""
+    """Create voice campaign from form submission"""
     try:
         # Validate CSV file
         if not csv_file.filename.endswith('.csv'):
@@ -131,62 +129,68 @@ async def create_campaign_form(
     except Exception as e:
         return RedirectResponse(url=f"/campaigns?error=Error creating voice campaign: {str(e)}", status_code=302)
 
-# NEW: Single Call API Endpoint
+# FIXED: SINGLE CALL ENDPOINT with proper agent handling
 @router.post("/api/single-call")
 async def make_single_call(
     call_request: SingleCallRequest,
     current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    """Make a single outbound call"""
+    """Make a single call using Plivo - FIXED VERSION"""
     try:
-        # Get the agent
+        # Validate agent exists and belongs to user
         agent = db.query(models.Agent)\
-            .filter(models.Agent.id == call_request.agent_id, models.Agent.user_id == current_user.id)\
-            .first()
+            .filter(
+                models.Agent.id == call_request.agent_id,
+                models.Agent.user_id == current_user.id,
+                models.Agent.is_active == True
+            ).first()
         
         if not agent:
-            raise HTTPException(status_code=404, detail="Agent not found")
+            raise HTTPException(status_code=404, detail="Agent not found or inactive")
         
-        if not agent.external_agent_id:
-            raise HTTPException(status_code=400, detail="Agent not connected to Voice AI service")
-        
-        if not current_user.voice_api_key:
-            raise HTTPException(status_code=400, detail="Voice AI API key not configured")
-        
-        # Create conversation record
+        # Create conversation record first
         conversation = models.Conversation(
             user_id=current_user.id,
-            agent_id=agent.id,
+            agent_id=call_request.agent_id,
+            campaign_id=None,  # Single calls have no campaign
             phone_number=call_request.phone_number,
             contact_name=call_request.contact_name,
             status="initiating"
         )
+        
         db.add(conversation)
         db.commit()
         db.refresh(conversation)
         
-        # Make the call using ElevenLabs
-        client = ElevenLabsClient(current_user.voice_api_key)
+        # Initialize Plivo client
+        try:
+            plivo_client = PlivoClient()
+        except ValueError as e:
+            conversation.status = "failed"
+            db.commit()
+            raise HTTPException(status_code=400, detail=f"Plivo configuration error: {str(e)}")
         
-        # Create metadata for the call
-        call_metadata = {
+        # FIXED: Use safe attribute access for agent fields
+        agent_data = {
+            "agent_id": agent.id,
+            "conversation_id": conversation.id,
+            "agent_name": agent.name,
+            "agent_prompt": getattr(agent, 'system_prompt', None) or getattr(agent, 'prompt', '') or '',  # SAFE ACCESS
             "contact_name": call_request.contact_name,
             "call_purpose": call_request.call_purpose,
-            "notes": call_request.notes,
-            "conversation_id": conversation.id,
-            "call_type": "single_call"
+            "notes": call_request.notes
         }
         
-        result = await client.make_single_call(
-            agent.external_agent_id,
-            call_request.phone_number,
-            metadata=call_metadata
+        # Make the call using Plivo
+        result = await plivo_client.make_call(
+            to_number=call_request.phone_number,
+            agent_data=agent_data
         )
         
         if result["success"]:
-            # Update conversation with external ID
-            conversation.external_conversation_id = result["call"].get("conversation_id")
+            # Update conversation with call UUID
+            conversation.external_call_id = result["call_uuid"]
             conversation.status = "in_progress"
             db.commit()
             
@@ -194,9 +198,8 @@ async def make_single_call(
                 "success": True,
                 "message": "Call initiated successfully",
                 "conversation_id": conversation.id,
-                "status": "in_progress",
+                "call_uuid": result["call_uuid"],
                 "phone_number": call_request.phone_number,
-                "contact_name": call_request.contact_name,
                 "agent_name": agent.name
             }
         else:
@@ -213,83 +216,86 @@ async def make_single_call(
         raise
     except Exception as e:
         # Update conversation status if exists
-        if 'conversation' in locals():
+        if 'conversation' in locals() and conversation:
             conversation.status = "failed"
             db.commit()
         
         raise HTTPException(status_code=500, detail=f"Call initiation error: {str(e)}")
 
-# NEW: Get Recent Single Calls
-@router.get("/api/recent-single-calls")
-async def get_recent_single_calls(
-    limit: int = 10,
+@router.get("/api")
+async def get_campaigns(
     current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    """Get recent single calls (calls without campaign_id)"""
-    recent_calls = db.query(models.Conversation)\
-        .filter(
-            models.Conversation.user_id == current_user.id,
-            models.Conversation.campaign_id.is_(None)  # Single calls have no campaign
-        )\
-        .order_by(desc(models.Conversation.created_at))\
-        .limit(limit).all()
+    """Get voice campaigns list"""
+    campaigns = db.query(models.Campaign)\
+        .filter(models.Campaign.user_id == current_user.id)\
+        .order_by(models.Campaign.created_at.desc()).all()
     
-    return {
-        "calls": [
-            {
-                "id": call.id,
-                "phone_number": call.phone_number,
-                "contact_name": call.contact_name,
-                "status": call.status,
-                "duration_seconds": call.duration_seconds,
-                "created_at": call.created_at.isoformat(),
-                "agent_id": call.agent_id
-            }
-            for call in recent_calls
-        ],
-        "total": len(recent_calls)
-    }
+    return [
+        {
+            "id": campaign.id,
+            "name": campaign.name,
+            "status": campaign.status,
+            "total_contacts": campaign.total_contacts,
+            "completed_calls": campaign.completed_calls,
+            "failed_calls": campaign.failed_calls,
+            "created_at": campaign.created_at.isoformat(),
+            "agent_name": campaign.agent.name if campaign.agent else None
+        }
+        for campaign in campaigns
+    ]
 
-# NEW: Single Call Statistics
-@router.get("/api/single-call-stats")
-async def get_single_call_statistics(
+@router.get("/{campaign_id}/conversations")
+async def get_campaign_conversations(
+    campaign_id: int,
     current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    """Get statistics for single calls"""
-    from sqlalchemy import func
+    """Get conversations for a specific voice campaign"""
+    campaign = db.query(models.Campaign)\
+        .filter(models.Campaign.id == campaign_id, models.Campaign.user_id == current_user.id)\
+        .first()
     
-    # Get single calls (no campaign_id)
-    single_calls_query = db.query(models.Conversation)\
-        .filter(
-            models.Conversation.user_id == current_user.id,
-            models.Conversation.campaign_id.is_(None)
-        )
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Voice campaign not found")
     
-    total_single_calls = single_calls_query.count()
+    conversations = db.query(models.Conversation)\
+        .filter(models.Conversation.campaign_id == campaign_id)\
+        .order_by(models.Conversation.created_at.desc()).all()
     
-    completed_single_calls = single_calls_query\
-        .filter(models.Conversation.status == "completed").count()
+    return [
+        {
+            "id": conv.id,
+            "phone_number": conv.phone_number,
+            "contact_name": conv.contact_name,
+            "status": conv.status,
+            "duration_seconds": conv.duration_seconds,
+            "created_at": conv.created_at.isoformat(),
+            "transcript": conv.transcript
+        }
+        for conv in conversations
+    ]
+
+@router.delete("/{campaign_id}")
+async def delete_campaign(
+    campaign_id: int,
+    current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
+    db: Session = Depends(get_db)
+):
+    """Delete voice campaign"""
+    campaign = db.query(models.Campaign)\
+        .filter(models.Campaign.id == campaign_id, models.Campaign.user_id == current_user.id)\
+        .first()
     
-    failed_single_calls = single_calls_query\
-        .filter(models.Conversation.status == "failed").count()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Voice campaign not found")
     
-    # Average duration for single calls
-    avg_duration = single_calls_query\
-        .filter(models.Conversation.duration_seconds.isnot(None))\
-        .with_entities(func.avg(models.Conversation.duration_seconds))\
-        .scalar() or 0
+    # Delete campaign (conversations will be deleted via cascade)
+    db.delete(campaign)
+    db.commit()
     
-    success_rate = (completed_single_calls / total_single_calls * 100) if total_single_calls > 0 else 0
-    
-    return {
-        "total_single_calls": total_single_calls,
-        "completed_calls": completed_single_calls,
-        "failed_calls": failed_single_calls,
-        "success_rate": round(success_rate, 2),
-        "average_duration": round(avg_duration, 2)
-    }
+    return {"message": "Voice campaign deleted successfully"}
 
 @router.post("/{campaign_id}/launch")
 async def launch_campaign(
@@ -297,7 +303,7 @@ async def launch_campaign(
     current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    """Launch voice campaign (white-label)"""
+    """Launch voice campaign"""
     campaign = db.query(models.Campaign)\
         .filter(models.Campaign.id == campaign_id, models.Campaign.user_id == current_user.id)\
         .first()
@@ -329,26 +335,27 @@ async def launch_campaign(
     campaign.status = "running"
     db.commit()
     
-    # Make calls using Voice AI
+    # Make calls using Voice AI client
     client = ElevenLabsClient(current_user.voice_api_key)
     successful_calls = 0
     failed_calls = 0
     
     for conversation in conversations:
         try:
-            result = await client.make_single_call(
-                agent.external_agent_id,
-                conversation.phone_number,
+            result = await client.make_outbound_call(
+                agent_id=agent.external_agent_id,
+                customer_phone_number=conversation.phone_number,
                 metadata={
-                    "campaign_id": campaign_id,
-                    "contact_name": conversation.contact_name,
-                    "conversation_id": conversation.id
+                    "conversation_id": str(conversation.id),
+                    "campaign_id": str(campaign_id),
+                    "contact_name": conversation.contact_name or "",
+                    "user_id": str(current_user.id)
                 }
             )
             
             if result["success"]:
-                conversation.external_conversation_id = result["call"]["conversation_id"]
                 conversation.status = "in_progress"
+                conversation.external_call_id = result.get("call_id")
                 successful_calls += 1
             else:
                 conversation.status = "failed"
@@ -357,115 +364,89 @@ async def launch_campaign(
         except Exception as e:
             conversation.status = "failed"
             failed_calls += 1
-            print(f"Failed to make call to {conversation.phone_number}: {e}")
-        
-        db.commit()
     
-    # Update campaign statistics
-    campaign.completed_calls = successful_calls + failed_calls
-    campaign.successful_calls = successful_calls
+    # Update campaign stats
+    campaign.completed_calls = successful_calls
     campaign.failed_calls = failed_calls
     
-    if successful_calls + failed_calls >= len(conversations):
+    if successful_calls == 0:
+        campaign.status = "failed"
+    elif failed_calls == 0:
         campaign.status = "completed"
+    else:
+        campaign.status = "partial"
     
     db.commit()
     
     return {
-        "message": "Voice campaign launched successfully",
+        "message": f"Campaign launched: {successful_calls} calls started, {failed_calls} failed",
         "successful_calls": successful_calls,
         "failed_calls": failed_calls,
-        "note": "Limited to 5 calls for testing"
+        "campaign_status": campaign.status
     }
 
-@router.get("/{campaign_id}/conversations")
-async def get_campaign_conversations(
-    campaign_id: int,
+# Additional helper endpoints
+@router.get("/api/recent-single-calls")
+async def get_recent_single_calls(
+    limit: int = 10,
     current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    """Get all conversations for a voice campaign (white-label)"""
-    campaign = db.query(models.Campaign)\
-        .filter(models.Campaign.id == campaign_id, models.Campaign.user_id == current_user.id)\
-        .first()
-    
-    if not campaign:
-        raise HTTPException(status_code=404, detail="Voice campaign not found")
-    
-    conversations = db.query(models.Conversation)\
-        .filter(models.Conversation.campaign_id == campaign_id)\
-        .order_by(models.Conversation.created_at.desc()).all()
-    
-    return [
-        {
-            "id": conv.id,
-            "phone_number": conv.phone_number,
-            "contact_name": conv.contact_name,
-            "status": conv.status,
-            "duration_seconds": conv.duration_seconds,
-            "created_at": conv.created_at.isoformat(),
-            "transcript": conv.transcript
-        }
-        for conv in conversations
-    ]
-
-@router.delete("/{campaign_id}")
-async def delete_campaign(
-    campaign_id: int,
-    current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
-    db: Session = Depends(get_db)
-):
-    """Delete voice campaign (white-label)"""
-    campaign = db.query(models.Campaign)\
-        .filter(models.Campaign.id == campaign_id, models.Campaign.user_id == current_user.id)\
-        .first()
-    
-    if not campaign:
-        raise HTTPException(status_code=404, detail="Voice campaign not found")
-    
-    # Delete campaign (conversations will be deleted via cascade)
-    db.delete(campaign)
-    db.commit()
-    
-    return {"message": "Voice campaign deleted successfully"}
-
-# NEW: Batch operations for single calls
-@router.post("/api/batch-single-calls")
-async def make_batch_single_calls(
-    calls: List[SingleCallRequest],
-    current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
-    db: Session = Depends(get_db)
-):
-    """Make multiple single calls at once"""
-    if len(calls) > 10:  # Limit batch size
-        raise HTTPException(status_code=400, detail="Maximum 10 calls per batch")
-    
-    results = []
-    
-    for call_request in calls:
-        try:
-            result = await make_single_call(call_request, current_user, db)
-            results.append({
-                "phone_number": call_request.phone_number,
-                "success": True,
-                "conversation_id": result["conversation_id"]
-            })
-        except Exception as e:
-            results.append({
-                "phone_number": call_request.phone_number,
-                "success": False,
-                "error": str(e)
-            })
-    
-    successful = len([r for r in results if r["success"]])
-    failed = len(results) - successful
+    """Get recent single calls"""
+    recent_calls = db.query(models.Conversation)\
+        .filter(
+            models.Conversation.user_id == current_user.id,
+            models.Conversation.campaign_id.is_(None)
+        )\
+        .order_by(desc(models.Conversation.created_at))\
+        .limit(limit).all()
     
     return {
-        "message": f"Batch completed: {successful} successful, {failed} failed",
-        "results": results,
-        "summary": {
-            "total": len(calls),
-            "successful": successful,
-            "failed": failed
-        }
+        "calls": [
+            {
+                "id": call.id,
+                "phone_number": call.phone_number,
+                "contact_name": call.contact_name,
+                "status": call.status,
+                "duration_seconds": call.duration_seconds,
+                "created_at": call.created_at.isoformat(),
+                "agent_id": call.agent_id
+            }
+            for call in recent_calls
+        ],
+        "total": len(recent_calls)
+    }
+
+@router.get("/api/single-call-stats")
+async def get_single_call_statistics(
+    current_user: models.User = Depends(auth.get_current_active_user_from_cookie),
+    db: Session = Depends(get_db)
+):
+    """Get statistics for single calls"""
+    single_calls_query = db.query(models.Conversation)\
+        .filter(
+            models.Conversation.user_id == current_user.id,
+            models.Conversation.campaign_id.is_(None)
+        )
+    
+    total_single_calls = single_calls_query.count()
+    completed_single_calls = single_calls_query\
+        .filter(models.Conversation.status == "completed").count()
+    failed_single_calls = single_calls_query\
+        .filter(models.Conversation.status == "failed").count()
+    
+    # Average duration for single calls
+    avg_duration = single_calls_query\
+        .filter(models.Conversation.duration_seconds.isnot(None))\
+        .with_entities(func.avg(models.Conversation.duration_seconds))\
+        .scalar() or 0
+    
+    success_rate = (completed_single_calls / total_single_calls * 100) if total_single_calls > 0 else 0
+    
+    return {
+        "total_single_calls": total_single_calls,
+        "completed_calls": completed_single_calls,
+        "failed_calls": failed_single_calls,
+        "success_rate": round(success_rate, 2),
+        "average_duration": round(avg_duration, 2)
     }

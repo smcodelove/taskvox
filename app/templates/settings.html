@@ -371,9 +371,42 @@ function confirmAccountDeletion() {
 document.addEventListener('DOMContentLoaded', loadUsageStats);
 
 
-<!-- Page ke bottom mein existing <script> tag ke andar ye function add karo -->
+function showToast(message, type = 'info') {
+    // Create toast element
+    const toastContainer = document.getElementById('toastContainer') || createToastContainer();
+    
+    const toastEl = document.createElement('div');
+    toastEl.className = `toast align-items-center text-white bg-${type === 'success' ? 'success' : type === 'error' ? 'danger' : 'info'} border-0`;
+    toastEl.setAttribute('role', 'alert');
+    toastEl.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">
+                ${message}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    `;
+    
+    toastContainer.appendChild(toastEl);
+    
+    // Initialize and show toast
+    const toast = new bootstrap.Toast(toastEl);
+    toast.show();
+    
+    // Remove after hiding
+    toastEl.addEventListener('hidden.bs.toast', () => {
+        toastEl.remove();
+    });
+}
 
-// Existing JavaScript functions ke saath ye function add karo:
+function createToastContainer() {
+    const container = document.createElement('div');
+    container.id = 'toastContainer';
+    container.className = 'toast-container position-fixed top-0 end-0 p-3';
+    container.style.zIndex = '9999';
+    document.body.appendChild(container);
+    return container;
+}
 
 async function testPlivoConnection() {
     const button = event.target;
@@ -388,16 +421,20 @@ async function testPlivoConnection() {
         const response = await fetch('/settings/test-plivo');
         const result = await response.json();
         
+        console.log('Plivo Test Result:', result); // Debug log
+        
         if (result.success) {
             statusSpan.innerHTML = '<span class="badge bg-success">Connected ✓</span>';
             showToast('Plivo connection successful!', 'success');
         } else {
             statusSpan.innerHTML = '<span class="badge bg-danger">Failed ✗</span>';
             showToast(`Connection failed: ${result.message}`, 'error');
+            console.error('Plivo Error:', result);
         }
     } catch (error) {
         statusSpan.innerHTML = '<span class="badge bg-danger">Error ✗</span>';
         showToast('Connection test failed', 'error');
+        console.error('Network Error:', error);
     } finally {
         button.disabled = false;
         button.innerHTML = originalText;

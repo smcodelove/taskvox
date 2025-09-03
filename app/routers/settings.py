@@ -9,11 +9,16 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from ..plivo_client import PlivoClient
 
 from app.database import get_db
 from app import models, schemas, auth
 from app.elevenlabs_client import ElevenLabsClient
+try:
+    from ..plivo_client import PlivoClient
+    PLIVO_AVAILABLE = True
+except ImportError as e:
+    PLIVO_AVAILABLE = False
+    IMPORT_ERROR = str(e)
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -211,18 +216,85 @@ async def get_usage_stats(
 async def test_plivo_connection(
     current_user: models.User = Depends(auth.get_current_active_user_from_cookie)
 ):
-    """Test Plivo connection"""
+    """Enhanced Plivo connection test"""
+    
+    # Step 1: Check if Plivo is available
+    if not PLIVO_AVAILABLE:
+        return {
+            "success": False,
+            "message": f"Plivo library not available: {IMPORT_ERROR}",
+            "solution": "Run: pip install plivo"
+        }
+    
     try:
+        # Step 2: Check environment variables
+        import os
+        auth_id = os.getenv("PLIVO_AUTH_ID")
+        auth_token = os.getenv("PLIVO_AUTH_TOKEN")
+        from_number = os.getenv("PLIVO_FROM_NUMBER")
+        
+        if not auth_id:
+            return {
+                "success": False,
+                "message": "PLIVO_AUTH_ID not found in environment",
+                "solution": "Add PLIVO_AUTH_ID=your_auth_id to .env file"
+            }
+        
+        if not auth_token:
+            return {
+                "success": False,
+                "message": "PLIVO_AUTH_TOKEN not found in environment",
+                "solution": "Add PLIVO_AUTH_TOKEN=your_token to .env file"
+            }
+        
+        # Step 3: Initialize client
         plivo_client = PlivoClient()
+        
+        # Step 4: Simple credential format check
+        simple_test = plivo_client.test_simple_connection()
+        if not simple_test["success"]:
+            return {
+                "success": False,
+                "message": simple_test["error"],
+                "details": simple_test
+            }
+        
+        # Step 5: Full API verification
         result = plivo_client.verify_credentials()
         
+        if result["success"]:
+            return {
+                "success": True,
+                "message": f"✅ Plivo connection successful via {result.get('method', 'API')}",
+                "details": {
+                    "account_name": result.get("account_name", "Unknown"),
+                    "account_id": result.get("account_id", auth_id),
+                    "cash_credits": result.get("cash_credits", "0.00"),
+                    "from_number": from_number,
+                    "method": result.get("method", "API")
+                }
+            }
+        else:
+            return {
+                "success": False,
+                "message": f"❌ Connection failed: {result['error']}",
+                "details": result,
+                "troubleshooting": [
+                    "1. Verify AUTH_ID and AUTH_TOKEN from https://console.plivo.com/",
+                    "2. Check if account has sufficient credits",
+                    "3. Ensure credentials are active and not expired"
+                ]
+            }
+            
+    except ValueError as e:
         return {
-            "success": result["success"],
-            "message": "Plivo connection successful!" if result["success"] else f"Connection failed: {result['error']}",
-            "details": result
+            "success": False,
+            "message": f"Configuration error: {str(e)}",
+            "solution": "Check your .env file configuration"
         }
     except Exception as e:
         return {
             "success": False,
-            "message": f"Plivo configuration error: {str(e)}"
+            "message": f"Unexpected error: {str(e)}",
+            "type": type(e).__name__
         }
