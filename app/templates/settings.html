@@ -183,6 +183,48 @@
         </div>
     </div>
 </div>
+
+<!-- Existing content ke neeche ye section add karo -->
+
+<!-- Plivo Configuration Section -->
+<div class="card mt-4">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-phone me-2"></i>Plivo Configuration
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <label class="form-label">From Number</label>
+                    <input type="text" class="form-control" readonly 
+                           value="+918035736994">
+                    <div class="form-text">Your Plivo caller ID number</div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <label class="form-label">Connection Status</label>
+                    <div>
+                        <button type="button" class="btn btn-outline-primary btn-sm" 
+                                onclick="testPlivoConnection()">
+                            <i class="fas fa-check-circle me-1"></i>Test Connection
+                        </button>
+                        <span id="plivoStatus" class="ms-2"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle me-2"></i>
+            <strong>Plivo Integration:</strong> Your calls will now show +918035736994 as caller ID. 
+            Credentials are securely configured in environment variables.
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -327,5 +369,42 @@ function confirmAccountDeletion() {
 
 // Load usage stats on page load
 document.addEventListener('DOMContentLoaded', loadUsageStats);
+
+
+<!-- Page ke bottom mein existing <script> tag ke andar ye function add karo -->
+
+// Existing JavaScript functions ke saath ye function add karo:
+
+async function testPlivoConnection() {
+    const button = event.target;
+    const statusSpan = document.getElementById('plivoStatus');
+    const originalText = button.innerHTML;
+    
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Testing...';
+    statusSpan.innerHTML = '';
+    
+    try {
+        const response = await fetch('/settings/test-plivo');
+        const result = await response.json();
+        
+        if (result.success) {
+            statusSpan.innerHTML = '<span class="badge bg-success">Connected ✓</span>';
+            showToast('Plivo connection successful!', 'success');
+        } else {
+            statusSpan.innerHTML = '<span class="badge bg-danger">Failed ✗</span>';
+            showToast(`Connection failed: ${result.message}`, 'error');
+        }
+    } catch (error) {
+        statusSpan.innerHTML = '<span class="badge bg-danger">Error ✗</span>';
+        showToast('Connection test failed', 'error');
+    } finally {
+        button.disabled = false;
+        button.innerHTML = originalText;
+    }
+}
+
+
 </script>
+
 {% endblock %}

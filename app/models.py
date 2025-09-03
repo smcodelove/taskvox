@@ -21,6 +21,11 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
+    plivo_auth_id = Column(String, nullable=True)
+    plivo_auth_token = Column(String, nullable=True)  
+    plivo_from_number = Column(String, nullable=True)
+    plivo_answer_url = Column(String, nullable=True)
+
     # Relationships
     agents = relationship("Agent", back_populates="user", cascade="all, delete-orphan")
     campaigns = relationship("Campaign", back_populates="user", cascade="all, delete-orphan")

@@ -11,6 +11,7 @@ from typing import List, Dict
 import json
 import asyncio
 from datetime import datetime, timedelta
+from fastapi import HTTPException
 
 from app.database import get_db
 from app import models, auth

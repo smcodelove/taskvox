@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from pydantic import BaseModel
 from datetime import datetime
+from ..plivo_client import PlivoClient 
 
 from app.database import get_db
 from app import models, schemas, auth

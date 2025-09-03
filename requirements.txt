@@ -42,3 +42,5 @@ fpdf2==2.7.6
 openpyxl==3.1.2
 
 websockets==11.0.3
+
+plivo==4.46.0

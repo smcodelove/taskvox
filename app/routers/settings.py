@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
+from ..plivo_client import PlivoClient
 
 from app.database import get_db
 from app import models, schemas, auth
@@ -203,3 +204,25 @@ async def get_usage_stats(
         "successful_calls": successful_calls,
         "success_rate": (successful_calls / total_calls * 100) if total_calls > 0 else 0
     }
+
+# File ke end mein (existing functions ke neeche) ye function add karo:
+
+@router.get("/test-plivo")
+async def test_plivo_connection(
+    current_user: models.User = Depends(auth.get_current_active_user_from_cookie)
+):
+    """Test Plivo connection"""
+    try:
+        plivo_client = PlivoClient()
+        result = plivo_client.verify_credentials()
+        
+        return {
+            "success": result["success"],
+            "message": "Plivo connection successful!" if result["success"] else f"Connection failed: {result['error']}",
+            "details": result
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Plivo configuration error: {str(e)}"
+        }
